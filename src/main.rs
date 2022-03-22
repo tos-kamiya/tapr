@@ -78,11 +78,15 @@ fn all_digits(items: &[&str]) -> bool {
     true
 }
 
-fn print_cell_in_column<S: AsRef<str>>(cell_split: &[S], column_width: usize, items_all_digits: bool) {
+fn print_spaces(width: usize) {
+    for _i in 0..width {
+        print!(" ");
+    }
+}
+
+fn format_print_cell<S: AsRef<str>>(cell_split: &[S], column_width: usize, items_all_digits: bool) {
     if items_all_digits {
-        for _i in 0..(column_width - cell_split.len()) {
-            print!(" ");
-        }
+        print_spaces(column_width - cell_split.len());
         for ss in cell_split {
             let ss = ss.as_ref();
             print!("{}", ss);
@@ -95,9 +99,68 @@ fn print_cell_in_column<S: AsRef<str>>(cell_split: &[S], column_width: usize, it
             let ssl = UnicodeWidthStr::width(ss);
             w += ssl;
         }
-        for _i in w..column_width {
-            print!(" ");
+        print_spaces(column_width - w);
+    }
+}
+
+fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
+    let column_count = column_widths.len();
+
+    let mut cell_splits: Vec<Vec<&str>> = vec![];
+    for field in line.split(cell_separator) {
+        let v: Vec<&str> = UnicodeSegmentation::graphemes(field, true).collect(); 
+        cell_splits.push(v);
+    }
+    assert!(cell_splits.len() == column_count);
+    let items_all_digits: Vec<bool> = cell_splits.iter().map(|items| all_digits(items)).collect();
+
+    let mut linenum_printed = false;
+    let mut dones: Vec<usize> = vec![0; column_count];
+    while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
+        if linenum_width > 0 {
+            print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
+            if linenum_printed {
+                print_spaces(linenum_width);
+            } else {
+                let linenum_str = (li + 1).to_string();
+                print_spaces(linenum_width - linenum_str.len());
+                print!("{}", linenum_str);
+            }
+            print!("\u{1b}[90m\u{2595}\u{1b}[22m");
+            linenum_printed = true;
         }
+    
+        let mut todos: Vec<usize> = vec![0; column_count];
+        for ci in 0..column_count {
+            let csc = &cell_splits[ci];
+            let cwc = column_widths[ci];
+            todos[ci] = dones[ci];
+            let mut w = 0;
+            for ii in dones[ci]..cell_splits[ci].len() {
+                let ssl = UnicodeWidthStr::width(csc[ii]);
+                if w == 0 || w + ssl <= cwc {
+                    todos[ci] = ii + 1;
+                    w += ssl;
+                } else {
+                    break; // for ii
+                }
+            }
+        }
+
+        for ci in 0..column_count {
+            let csc = &cell_splits[ci];
+            let cwc = column_widths[ci];
+            let iadc = items_all_digits[ci];
+            print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
+            format_print_cell(&csc[dones[ci]..todos[ci]], cwc, iadc);
+            if ci == column_count - 1 {
+                break; // for ci
+            }
+            print!("\u{1b}[90m\u{2595}\u{1b}[22m");
+        }
+        println!("\u{1b}[0m");
+
+        dones = todos;
     }
 }
 
@@ -108,6 +171,10 @@ struct Opt {
     /// Treat input as CSV (even when including tab characters)
     #[structopt(short, long)]
     csv: bool,
+
+    /// Print line number
+    #[structopt(short, long)]
+    linenum: bool,
 
     /// Input file
     #[structopt(parse(from_os_str))]
@@ -120,7 +187,7 @@ fn main() {
 
     let size = terminal_size();
     let (Width(width), _) = size.unwrap();
-    let terminal_width = width as usize;
+    let terminal_width: usize = width as usize;
 
     let lines: Vec<String> = if let Some(f) = opt.input {
         let fp = File::open(f).unwrap();
@@ -131,61 +198,26 @@ fn main() {
     };
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
     let cell_separator = if opt.csv || ! includes_tab { ',' } else { '\t' };
+    let linenum_width = if opt.linenum {
+        (lines.len()).to_string().len()
+    } else {
+        0
+    };
 
     let column_widths = get_column_widths(&lines, cell_separator);
 
-    let column_count: usize = column_widths.len();
-
-    if column_count * (MIN_COLUMN_WIDTH + 1) > terminal_width {
+    if column_widths.len() * (MIN_COLUMN_WIDTH + 1) > terminal_width {
         eprintln!("Error: terminal width too small for input table.");
         std::process::exit(1);
     }
 
-    let column_widths = det_print_width_of_columns(&column_widths, terminal_width);
+    let column_widths = if linenum_width > 0 {
+        det_print_width_of_columns(&column_widths, terminal_width - (linenum_width + 1))
+    } else {
+        det_print_width_of_columns(&column_widths, terminal_width)
+    };
+
     for (li, line) in lines.iter().enumerate() {
-        let mut cell_splits: Vec<Vec<&str>> = vec![];
-        for field in line.split(cell_separator) {
-            let mut v = Vec::<&str>::new();
-            for ss in UnicodeSegmentation::graphemes(field, true) {
-                v.push(ss);
-            }
-            cell_splits.push(v);
-        }
-        assert!(cell_splits.len() == column_count);
-        let items_all_digits: Vec<bool> = cell_splits.iter().map(|items| all_digits(items)).collect();
-
-        let mut dones: Vec<usize> = vec![0; column_count];
-        while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
-            let mut todos: Vec<usize> = vec![0; column_count];
-            for ci in 0..column_count {
-                let csc = &cell_splits[ci];
-                let cwc = column_widths[ci];
-                todos[ci] = dones[ci];
-                let mut w = 0;
-                for ii in dones[ci]..cell_splits[ci].len() {
-                    let ssl = UnicodeWidthStr::width(csc[ii]);
-                    if w == 0 || w + ssl <= cwc {
-                        todos[ci] = ii + 1;
-                        w += ssl;
-                    } else {
-                        break; // for ii
-                    }
-                }
-            }
-
-            for ci in 0..column_count {
-                let csc = &cell_splits[ci];
-                let cwc = column_widths[ci];
-                let iadc = items_all_digits[ci];
-                print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
-                print_cell_in_column(&csc[dones[ci]..todos[ci]], cwc, iadc);
-                if ci < column_count - 1 {
-                    print!("\u{1b}[90m\u{2595}\u{1b}[22m");
-                }
-            }
-            println!("\u{1b}[0m");
-
-            dones = todos;
-        }
+        format_print_line(li, line, cell_separator, &column_widths, linenum_width);
     }
 }

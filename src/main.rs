@@ -137,7 +137,7 @@ fn main() {
     let column_count: usize = column_widths.len();
 
     if column_count * (MIN_COLUMN_WIDTH + 1) > terminal_width {
-        println!("Error: terminal width too small for input table.");
+        eprintln!("Error: terminal width too small for input table.");
         std::process::exit(1);
     }
 

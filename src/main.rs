@@ -22,21 +22,17 @@ fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<
     let lines_len = lines.len();
 
     let mut column_width_lists = Vec::<Vec<usize>>::new();
-    let mut ri: usize = 0;
-    for line in lines {
+    for (ri, line) in lines.iter().enumerate() {
         let line = line.as_ref();
-        let mut ci: usize = 0;
-        for field in line.split(cell_separator) {
+        for (ci, field) in line.split(cell_separator).enumerate() {
             if ci >= column_width_lists.len() {
                 column_width_lists.push(vec![0; lines_len]);
             }
             column_width_lists[ci][ri] = str_width(field);
-            ci += 1;
         }
-        ri += 1;
     }
     for cwl in &mut column_width_lists {
-        cwl.sort();
+        cwl.sort_unstable();
     }
 
     let column_count: usize = column_width_lists.len();
@@ -54,9 +50,9 @@ fn det_print_width_of_columns(column_widths: &[usize], terminal_width: usize) ->
     let column_count: usize = column_widths.len();
 
     let mut need_to_alloc = 0;
-    for ci in 0..column_count {
-        if column_widths[ci] > MIN_COLUMN_WIDTH {
-            need_to_alloc += column_widths[ci] - MIN_COLUMN_WIDTH;
+    for cwc in column_widths {
+        if *cwc > MIN_COLUMN_WIDTH {
+            need_to_alloc += *cwc - MIN_COLUMN_WIDTH;
         }
     }
     let allocable = terminal_width - column_count * (MIN_COLUMN_WIDTH + 1);
@@ -79,7 +75,7 @@ fn all_digits(items: &[&str]) -> bool {
             }
         }
     }
-    return true;
+    true
 }
 
 fn print_cell_in_column<S: AsRef<str>>(cell_split: &[S], column_width: usize, items_all_digits: bool) {
@@ -146,8 +142,7 @@ fn main() {
     }
 
     let column_widths = det_print_width_of_columns(&column_widths, terminal_width);
-    let mut logical_line_index = 0;
-    for line in lines {
+    for (li, line) in lines.iter().enumerate() {
         let mut cell_splits: Vec<Vec<&str>> = vec![];
         for field in line.split(cell_separator) {
             let mut v = Vec::<&str>::new();
@@ -182,17 +177,15 @@ fn main() {
                 let csc = &cell_splits[ci];
                 let cwc = column_widths[ci];
                 let iadc = items_all_digits[ci];
-                print!("{}", if logical_line_index % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
+                print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
                 print_cell_in_column(&csc[dones[ci]..todos[ci]], cwc, iadc);
                 if ci < column_count - 1 {
                     print!("\u{1b}[90m\u{2595}\u{1b}[22m");
                 }
             }
-            println!("{}", "\u{1b}[0m");
+            println!("\u{1b}[0m");
 
             dones = todos;
         }
-
-        logical_line_index += 1;
     }
 }

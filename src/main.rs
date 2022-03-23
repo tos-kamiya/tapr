@@ -8,7 +8,10 @@ use terminal_size::{Width, terminal_size};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-const MIN_COLUMN_WIDTH: usize = 7;
+const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
+const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[32m", "\u{1b}[33m"];
+const ANSI_ESCAPE_SEPARATOR_COLOR: &[&str] = &["\u{1b}[90m", "\u{1b}[90m"];
+const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
 
 fn str_width(s: &str) -> usize {
     let mut w: usize = 0;
@@ -18,7 +21,10 @@ fn str_width(s: &str) -> usize {
     w
 }
 
-fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<usize> {
+#[derive(Copy, Clone, Debug)]
+struct MinMedMax(usize, usize, usize);
+
+fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<MinMedMax> {
     let lines_len = lines.len();
 
     let mut column_width_lists = Vec::<Vec<usize>>::new();
@@ -38,33 +44,44 @@ fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<
     let column_count: usize = column_width_lists.len();
     let median_index = (lines.len() + 1) / 2;
 
-    let mut column_widths: Vec::<usize> = vec![0; column_count];
+    let mut column_widths: Vec::<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
     for ci in 0..column_count {
-        column_widths[ci] = column_width_lists[ci][median_index];
+        let cwlc: &[usize] = &column_width_lists[ci];
+        column_widths[ci] = MinMedMax(cwlc[0], cwlc[median_index], cwlc[cwlc.len() - 1]);
     }
 
     column_widths
 }
 
-fn det_print_width_of_columns(column_widths: &[usize], terminal_width: usize) -> Vec<usize> {
-    let column_count: usize = column_widths.len();
+fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_width: usize) -> Option<Vec<usize>> {
+    let column_count: usize = column_width_minmedmaxs.len();
 
-    let mut need_to_alloc = 0;
-    for cwc in column_widths {
-        if *cwc > MIN_COLUMN_WIDTH {
-            need_to_alloc += *cwc - MIN_COLUMN_WIDTH;
+    let mut need_to_alloc: usize = 0;
+    let mut extra_allocable: usize = 0;
+    for mmm in column_width_minmedmaxs {
+        if mmm.1 > MAX_UNFOLDED_COLUMN_WIDTH {
+            need_to_alloc += mmm.1 - MAX_UNFOLDED_COLUMN_WIDTH;
+        } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
+            extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }
     }
-    let allocable = terminal_width - column_count * (MIN_COLUMN_WIDTH + 1);
-    let mut column_allocations: Vec<usize> = vec![MIN_COLUMN_WIDTH;column_count];
+    let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * (MAX_UNFOLDED_COLUMN_WIDTH + 1)) as isize;
+    if allocable < 0 {
+        return None;
+    }
+
+    let allocable = allocable as usize;
+    let mut column_allocations: Vec<usize> = vec![MAX_UNFOLDED_COLUMN_WIDTH; column_count];
     for ci in 0..column_count {
-        let cwc = column_widths[ci];
-        if cwc > MIN_COLUMN_WIDTH {
-            column_allocations[ci] += (cwc - MIN_COLUMN_WIDTH) * allocable / need_to_alloc;
+        let mmm = column_width_minmedmaxs[ci];
+        if mmm.1 > MAX_UNFOLDED_COLUMN_WIDTH {
+            column_allocations[ci] += (mmm.1 - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc;
+        } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
+            column_allocations[ci] -= MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }
     }
 
-    column_allocations
+    Some(column_allocations)
 }    
 
 fn all_digits(items: &[&str]) -> bool {
@@ -118,7 +135,7 @@ fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths:
     let mut dones: Vec<usize> = vec![0; column_count];
     while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
         if linenum_width > 0 {
-            print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
+            print!("{}", ANSI_ESCAPE_TEXT_COLOR[li % 2]);
             if linenum_printed {
                 print_spaces(linenum_width);
             } else {
@@ -126,7 +143,7 @@ fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths:
                 print_spaces(linenum_width - linenum_str.len());
                 print!("{}", linenum_str);
             }
-            print!("\u{1b}[90m\u{2595}\u{1b}[22m");
+            print!("{}\u{2595}", ANSI_ESCAPE_SEPARATOR_COLOR[li % 2]);
             linenum_printed = true;
         }
     
@@ -151,14 +168,14 @@ fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths:
             let csc = &cell_splits[ci];
             let cwc = column_widths[ci];
             let iadc = items_all_digits[ci];
-            print!("{}", if li % 2 == 0 { "\u{1b}[32m" } else { "\u{1b}[33m" });
+            print!("{}", ANSI_ESCAPE_TEXT_COLOR[li % 2]);
             format_print_cell(&csc[dones[ci]..todos[ci]], cwc, iadc);
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("\u{1b}[90m\u{2595}\u{1b}[22m");
+            print!("{}\u{2595}", ANSI_ESCAPE_SEPARATOR_COLOR[li % 2]);
         }
-        println!("\u{1b}[0m");
+        println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
         dones = todos;
     }
@@ -204,20 +221,19 @@ fn main() {
         0
     };
 
-    let column_widths = get_column_widths(&lines, cell_separator);
+    let column_width_minmedmaxs = get_column_widths(&lines, cell_separator);
 
-    if column_widths.len() * (MIN_COLUMN_WIDTH + 1) > terminal_width {
+    let cws = if linenum_width > 0 {
+        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width - (linenum_width + 1))
+    } else {
+        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width)
+    };
+    if let Some(column_widths) = cws {
+        for (li, line) in lines.iter().enumerate() {
+            format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+        }
+    } else {
         eprintln!("Error: terminal width too small for input table.");
         std::process::exit(1);
-    }
-
-    let column_widths = if linenum_width > 0 {
-        det_print_width_of_columns(&column_widths, terminal_width - (linenum_width + 1))
-    } else {
-        det_print_width_of_columns(&column_widths, terminal_width)
-    };
-
-    for (li, line) in lines.iter().enumerate() {
-        format_print_line(li, line, cell_separator, &column_widths, linenum_width);
     }
 }

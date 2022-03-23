@@ -9,6 +9,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
+const ANSI_ESCAPE_HEADER_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
 const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[34m", "\u{1b}[32m"];
 const ANSI_ESCAPE_FRAME_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
 const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
@@ -144,7 +145,7 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
     while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
         if linenum_width > 0 {
             print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
-            if linenum_printed {
+            if linenum_printed || line_number == 0 {
                 print_spaces(linenum_width);
             } else {
                 let linenum_str = line_number.to_string();
@@ -176,7 +177,8 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             let csc = &cell_splits[ci];
             let cwc = column_widths[ci];
             let iadc = items_all_digits[ci];
-            print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
+            let ac = if line_number == 0 { ANSI_ESCAPE_HEADER_COLOR } else { ANSI_ESCAPE_TEXT_COLOR };
+            print!("{}", ac[line_number % 2]);
             format_print_cell(&csc[dones[ci]..todos[ci]], cwc, iadc);
             if ci == column_count - 1 {
                 break; // for ci
@@ -200,6 +202,10 @@ struct Opt {
     /// Print line number
     #[structopt(short, long)]
     linenum: bool,
+
+    /// Print first line as a header
+    #[structopt(short, long)]
+    header: bool,
 
     /// Input file
     #[structopt(parse(from_os_str))]
@@ -237,8 +243,14 @@ fn main() {
         det_print_width_of_columns(&column_width_minmedmaxs, terminal_width)
     };
     if let Some(column_widths) = cws {
-        for (li, line) in lines.iter().enumerate() {
-            format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
+        if opt.header {
+            for (li, line) in lines.iter().enumerate() {
+                format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+            }
+        } else {
+            for (li, line) in lines.iter().enumerate() {
+                format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
+            }
         }
     } else {
         eprintln!("Error: terminal width too small for input table.");

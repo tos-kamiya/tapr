@@ -9,8 +9,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
-const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[32m", "\u{1b}[33m"];
-const ANSI_ESCAPE_SEPARATOR_COLOR: &[&str] = &["\u{1b}[90m", "\u{1b}[90m"];
+const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[34m", "\u{1b}[32m"];
+const ANSI_ESCAPE_FRAME_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
 const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
 
 fn str_width(s: &str) -> usize {
@@ -96,8 +96,8 @@ fn all_digits(items: &[&str]) -> bool {
 }
 
 fn print_spaces(width: usize) {
-    for _i in 0..width {
-        print!(" ");
+    if width > 0 {
+        print!("{:<width$}", " ", width = width);
     }
 }
 
@@ -120,7 +120,7 @@ fn format_print_cell<S: AsRef<str>>(cell_split: &[S], column_width: usize, items
     }
 }
 
-fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
+fn format_print_line(line_number: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
     let column_count = column_widths.len();
 
     let mut cell_splits: Vec<Vec<&str>> = vec![];
@@ -135,15 +135,15 @@ fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths:
     let mut dones: Vec<usize> = vec![0; column_count];
     while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
         if linenum_width > 0 {
-            print!("{}", ANSI_ESCAPE_TEXT_COLOR[li % 2]);
+            print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
             if linenum_printed {
                 print_spaces(linenum_width);
             } else {
-                let linenum_str = (li + 1).to_string();
+                let linenum_str = line_number.to_string();
                 print_spaces(linenum_width - linenum_str.len());
                 print!("{}", linenum_str);
             }
-            print!("{}\u{2595}", ANSI_ESCAPE_SEPARATOR_COLOR[li % 2]);
+            print!("{}\u{23d0}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2]);
             linenum_printed = true;
         }
     
@@ -168,12 +168,12 @@ fn format_print_line(li: usize, line: &str, cell_separator: char, column_widths:
             let csc = &cell_splits[ci];
             let cwc = column_widths[ci];
             let iadc = items_all_digits[ci];
-            print!("{}", ANSI_ESCAPE_TEXT_COLOR[li % 2]);
+            print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
             format_print_cell(&csc[dones[ci]..todos[ci]], cwc, iadc);
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("{}\u{2595}", ANSI_ESCAPE_SEPARATOR_COLOR[li % 2]);
+            print!("{}\u{23d0}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2]);
         }
         println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
@@ -230,7 +230,7 @@ fn main() {
     };
     if let Some(column_widths) = cws {
         for (li, line) in lines.iter().enumerate() {
-            format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+            format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
         }
     } else {
         eprintln!("Error: terminal width too small for input table.");

@@ -27,14 +27,15 @@ struct MinMedMax(usize, usize, usize);
 fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<MinMedMax> {
     let lines_len = lines.len();
 
-    let mut column_width_lists = Vec::<Vec<usize>>::new();
+    let mut column_width_lists: Vec<Vec<usize>> = vec![];
     for (ri, line) in lines.iter().enumerate() {
         let line = line.as_ref();
         for (ci, field) in line.split(cell_separator).enumerate() {
             if ci >= column_width_lists.len() {
                 column_width_lists.push(vec![0; lines_len]);
             }
-            column_width_lists[ci][ri] = str_width(field);
+            let w = str_width(field);
+            column_width_lists[ci][ri] = w;
         }
     }
     for cwl in &mut column_width_lists {
@@ -54,16 +55,21 @@ fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<
 }
 
 fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_width: usize) -> Option<Vec<usize>> {
+    let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
+
     let column_count: usize = column_width_minmedmaxs.len();
 
     let mut need_to_alloc: usize = 0;
     let mut extra_allocable: usize = 0;
     for mmm in column_width_minmedmaxs {
-        if mmm.1 > MAX_UNFOLDED_COLUMN_WIDTH {
-            need_to_alloc += mmm.1 - MAX_UNFOLDED_COLUMN_WIDTH;
+        if mid_max(&mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
+            need_to_alloc += mid_max(mmm) - MAX_UNFOLDED_COLUMN_WIDTH;
         } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
             extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }
+    }
+    if need_to_alloc <= 0 {
+        need_to_alloc = 1;
     }
     let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * (MAX_UNFOLDED_COLUMN_WIDTH + 1)) as isize;
     if allocable < 0 {
@@ -74,8 +80,8 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
     let mut column_allocations: Vec<usize> = vec![MAX_UNFOLDED_COLUMN_WIDTH; column_count];
     for ci in 0..column_count {
         let mmm = column_width_minmedmaxs[ci];
-        if mmm.1 > MAX_UNFOLDED_COLUMN_WIDTH {
-            column_allocations[ci] += (mmm.1 - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc;
+        if mid_max(&mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
+            column_allocations[ci] += std::cmp::min(mmm.2 - MAX_UNFOLDED_COLUMN_WIDTH, (mid_max(&mmm) - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc);
         } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
             column_allocations[ci] -= MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }

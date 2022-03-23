@@ -91,8 +91,8 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
     Some(column_allocations)
 }    
 
-fn all_digits(items: &[&str]) -> bool {
-    for item in items {
+fn all_digits(subcells: &[&str]) -> bool {
+    for item in subcells {
         for c in item.chars() {
             if ! ('0' <= c && c <= '9') {
                 return false;
@@ -108,19 +108,19 @@ fn print_spaces(width: usize) {
     }
 }
 
-fn format_print_cell<S: AsRef<str>>(cell_split: &[S], column_width: usize, items_all_digits: bool) {
-    if items_all_digits {
-        print_spaces(column_width - cell_split.len());
-        for ss in cell_split {
-            let ss = ss.as_ref();
-            print!("{}", ss);
+fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcells_all_digits: bool) {
+    if subcells_all_digits {
+        print_spaces(column_width - subcells.len());
+        for sc in subcells {
+            let sc = sc.as_ref();
+            print!("{}", sc);
         }
     } else {
         let mut w = 0;
-        for ss in cell_split {
-            let ss = ss.as_ref();
-            print!("{}", ss);
-            let ssl = UnicodeWidthStr::width(ss);
+        for sc in subcells {
+            let sc = sc.as_ref();
+            print!("{}", sc);
+            let ssl = UnicodeWidthStr::width(sc);
             w += ssl;
         }
         print_spaces(column_width - w);
@@ -130,19 +130,20 @@ fn format_print_cell<S: AsRef<str>>(cell_split: &[S], column_width: usize, items
 fn format_print_line(line_number: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
     let column_count = column_widths.len();
 
-    let mut cell_splits: Vec<Vec<&str>> = vec![];
+    let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
     for field in line.split(cell_separator) {
         let v: Vec<&str> = UnicodeSegmentation::graphemes(field, true).collect(); 
-        cell_splits.push(v);
+        subcells.push(v);
     }
-    while cell_splits.len() < column_count {
-        cell_splits.push(vec![]);
+    while subcells.len() < column_count {
+        subcells.push(vec![]);
     }
-    let items_all_digits: Vec<bool> = cell_splits.iter().map(|items| all_digits(items)).collect();
+    let subcells_all_digits: Vec<bool> = subcells.iter().map(|ss| all_digits(ss)).collect();
 
     let mut linenum_printed = false;
-    let mut dones: Vec<usize> = vec![0; column_count];
-    while (0..column_count).any(|ci| dones[ci] < cell_splits[ci].len()) {
+    let mut dones: Vec<usize> = vec![0; column_count]; // the indices of subcells already printed
+    while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
+        // print line number
         if linenum_width > 0 {
             print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
             if linenum_printed || line_number == 0 {
@@ -155,14 +156,15 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             print!("{}\u{23d0}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2]);
             linenum_printed = true;
         }
-    
+
+        // determine the subcells to be printed for each cell of the line
         let mut todos: Vec<usize> = vec![0; column_count];
         for ci in 0..column_count {
-            let csc = &cell_splits[ci];
+            let csc = &subcells[ci];
             let cwc = column_widths[ci];
             todos[ci] = dones[ci];
             let mut w = 0;
-            for ii in dones[ci]..cell_splits[ci].len() {
+            for ii in dones[ci]..subcells[ci].len() {
                 let ssl = UnicodeWidthStr::width(csc[ii]);
                 if w == 0 || w + ssl <= cwc {
                     todos[ci] = ii + 1;
@@ -173,13 +175,14 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             }
         }
 
+        // print the subcells
         for ci in 0..column_count {
-            let csc = &cell_splits[ci];
+            let csc = &subcells[ci];
             let cwc = column_widths[ci];
-            let iadc = items_all_digits[ci];
+            let sadc = subcells_all_digits[ci];
             let ac = if line_number == 0 { ANSI_ESCAPE_HEADER_COLOR } else { ANSI_ESCAPE_TEXT_COLOR };
             print!("{}", ac[line_number % 2]);
-            format_print_cell(&csc[dones[ci]..todos[ci]], cwc, iadc);
+            format_print_cell(&csc[dones[ci]..todos[ci]], cwc, sadc);
             if ci == column_count - 1 {
                 break; // for ci
             }
@@ -187,6 +190,7 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
         }
         println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
+        // update indices to mark the subcells "printed"
         dones = todos;
     }
 }
@@ -201,10 +205,10 @@ struct Opt {
 
     /// Print line number
     #[structopt(short, long)]
-    linenum: bool,
+    line_number: bool,
 
     /// Print first line as a header
-    #[structopt(short, long)]
+    #[structopt(short = "H", long)]
     header: bool,
 
     /// Input file
@@ -229,7 +233,7 @@ fn main() {
     };
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
     let cell_separator = if opt.csv || ! includes_tab { ',' } else { '\t' };
-    let linenum_width = if opt.linenum {
+    let linenum_width = if opt.line_number {
         (lines.len()).to_string().len()
     } else {
         0

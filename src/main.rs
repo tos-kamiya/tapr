@@ -128,7 +128,9 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
         let v: Vec<&str> = UnicodeSegmentation::graphemes(field, true).collect(); 
         cell_splits.push(v);
     }
-    assert!(cell_splits.len() == column_count);
+    while cell_splits.len() < column_count {
+        cell_splits.push(vec![]);
+    }
     let items_all_digits: Vec<bool> = cell_splits.iter().map(|items| all_digits(items)).collect();
 
     let mut linenum_printed = false;

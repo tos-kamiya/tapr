@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io;
 use std::io::BufRead;
 use std::path::PathBuf;
+use std::str;
 
 use structopt::StructOpt;
 use terminal_size::{Width, terminal_size};
@@ -14,7 +15,7 @@ use unicode_width::UnicodeWidthStr;
 const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
 const ANSI_ESCAPE_HEADER_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
 const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[34m", "\u{1b}[32m"];
-const ANSI_ESCAPE_FRAME_COLOR: &[&str] = &["\u{1b}[90m", "\u{1b}[90m"];
+const ANSI_ESCAPE_FRAME_COLOR: &str = "\u{1b}[90m";
 const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
 
 const FRAME_VERTICAL: &str = "\u{2502}";
@@ -39,6 +40,12 @@ fn str_width(s: &str) -> usize {
         w += UnicodeWidthStr::width(ss);
     }
     w
+}
+
+fn print_str_bar(s: &str, repeat: usize) {
+    if repeat > 0 {
+        print!("{}", (0..repeat).map(|_| s).collect::<String>());
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -82,13 +89,13 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
     let mut need_to_alloc: usize = 0;
     let mut extra_allocable: usize = 0;
     for mmm in column_width_minmedmaxs {
-        if mid_max(&mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
+        if mid_max(mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
             need_to_alloc += mid_max(mmm) - MAX_UNFOLDED_COLUMN_WIDTH;
         } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
             extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }
     }
-    if need_to_alloc <= 0 {
+    if need_to_alloc == 0 {
         need_to_alloc = 1;
     }
     let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH) as isize;
@@ -113,7 +120,7 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
 fn all_digits(subcells: &[&str]) -> bool {
     for item in subcells {
         for c in item.chars() {
-            if ! ('0' <= c && c <= '9') {
+            if ! ('0'..='9').contains(&c) {
                 return false;
             }
         }
@@ -134,19 +141,15 @@ fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width
     let column_count = column_widths.len();
     let cross = match tmb { TMB::Top => FRAME_CROSS_TOP, TMB::Middle => FRAME_CROSS_MIDDLE, TMB::Bottom => FRAME_CROSS_BOTTOM };
 
-    print!("{}", ANSI_ESCAPE_FRAME_COLOR[0]);
+    print!("{}", ANSI_ESCAPE_FRAME_COLOR);
 
     if linenum_width > 0 {
-        for _ in 0..linenum_width {
-            print!("{}", FRAME_HORIZONTAL);
-        }
+        print_str_bar(FRAME_HORIZONTAL, linenum_width);
         print!("{}", cross);
     }
 
     for ci in 0..column_count {
-        for _ in 0..column_widths[ci] {
-            print!("{}", FRAME_HORIZONTAL);
-        }
+        print_str_bar(FRAME_HORIZONTAL, column_widths[ci]);
         if ci != column_count - 1 {
             print!("{}", cross);
         }
@@ -154,15 +157,9 @@ fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width
     println!("{}", ANSI_ESCAPE_RESET_COLOR);
 }
 
-fn print_spaces(width: usize) {
-    if width > 0 {
-        print!("{:<width$}", " ", width = width);
-    }
-}
-
 fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcells_all_digits: bool) {
     if subcells_all_digits {
-        print_spaces(column_width - subcells.len());
+        print_str_bar(" ", column_width - subcells.len());
         for sc in subcells {
             let sc = sc.as_ref();
             print!("{}", sc);
@@ -175,7 +172,7 @@ fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell
             let ssl = UnicodeWidthStr::width(sc);
             w += ssl;
         }
-        print_spaces(column_width - w);
+        print_str_bar(" ", column_width - w);
     }
 }
 
@@ -200,12 +197,12 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
             if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
-                print_spaces(linenum_width - linenum_str.len());
+                print_str_bar(" ", linenum_width - linenum_str.len());
                 print!("{}", linenum_str);
             } else {
-                print_spaces(linenum_width);
+                print_str_bar(" ", linenum_width);
             }
-            print!("{}{}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2], FRAME_VERTICAL);
+            print!("{}{}", ANSI_ESCAPE_FRAME_COLOR, FRAME_VERTICAL);
         }
 
         // determine the subcells to be printed for each cell in the current line
@@ -237,7 +234,7 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("{}{}{}", ANSI_ESCAPE_RESET_COLOR, ANSI_ESCAPE_FRAME_COLOR[line_number % 2], FRAME_VERTICAL);
+            print!("{}{}{}", ANSI_ESCAPE_RESET_COLOR, ANSI_ESCAPE_FRAME_COLOR, FRAME_VERTICAL);
         }
         println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
@@ -275,57 +272,65 @@ fn main() {
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
 
+    // get terminal width
     let size = terminal_size();
     let (Width(width), _) = size.unwrap();
     let terminal_width: usize = width as usize;
 
-    let lines: Vec<String> = if let Some(f) = opt.input {
-        let f0 = f.clone();
-        if let Ok(fp) = File::open(f) {
-            io::BufReader::new(fp).lines().map(|line| line.unwrap()).collect()
-        } else {
-            let f0 = f0.into_os_string().into_string().unwrap();
-            eprintln!("Error: fail to open file: {}", f0);
-            std::process::exit(1);
-        }
-    } else {
-        let stdin = io::stdin();
-        stdin.lock().lines().map(|line| line.unwrap()).collect()
+    // read input lines
+    let lines: Vec<String> = match opt.input {
+        None => {
+            let stdin = io::stdin();
+            stdin.lock().lines().map(|line| line.unwrap()).collect()
+        },
+        Some(f) => {
+            let f0 = f.clone();
+            if let Ok(fp) = File::open(f) {
+                io::BufReader::new(fp).lines().map(|line| line.unwrap()).collect()
+            } else {
+                let f0 = f0.into_os_string().into_string().unwrap();
+                eprintln!("Error: fail to open file: {}", f0);
+                std::process::exit(1);
+            }
+        },
     };
+
+    // determine cell separator
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
     let cell_separator = if opt.csv || ! includes_tab { ',' } else { '\t' };
+
+    // calculate the width for line number (if needed)
     let linenum_width = if opt.line_number {
         (lines.len()).to_string().len()
     } else {
         0
     };
 
+    // determine width of each column
     let column_width_minmedmaxs = get_column_widths(&lines, cell_separator);
-
     let cws = if linenum_width > 0 {
-        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width - (linenum_width + 1))
+        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width - (linenum_width + *FRAME_CHAR_WIDTH))
     } else {
         det_print_width_of_columns(&column_width_minmedmaxs, terminal_width)
     };
-    if let Some(column_widths) = cws {
-        if opt.header {
-            format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
-            for (li, line) in lines.iter().enumerate() {
-                format_print_line(li, line, cell_separator, &column_widths, linenum_width);
-                if li == 0 {
-                    format_print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
-                }
-            }
-            format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
-        } else {
-            format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
-            for (li, line) in lines.iter().enumerate() {
-                format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
-            }
-            format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
-        }
-    } else {
+    let column_widths = cws.unwrap_or_else(|| {
         eprintln!("Error: terminal width too small for input table.");
         std::process::exit(1);
+    });
+
+    // print lines as a table
+    format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
+    if opt.header {
+        for (li, line) in lines.iter().enumerate() {
+            format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+            if li == 0 {
+                format_print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
+            }
+        }
+    } else {
+        for (li, line) in lines.iter().enumerate() {
+            format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
+        }
     }
+    format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
 }

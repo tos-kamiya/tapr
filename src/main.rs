@@ -9,6 +9,7 @@ use std::str;
 
 use structopt::StructOpt;
 use terminal_size::{Width, terminal_size};
+use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -158,20 +159,14 @@ fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width
 }
 
 fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcells_all_digits: bool) {
+    let w: usize = subcells.iter().map(|s| UnicodeWidthStr::width(s.as_ref())).sum();
+    let s: String = subcells.iter().map(|s| s.as_ref()).collect();
+    let ns: String = s.nfc().to_string();
     if subcells_all_digits {
-        print_str_bar(" ", column_width - subcells.len());
-        for sc in subcells {
-            let sc = sc.as_ref();
-            print!("{}", sc);
-        }
+        print_str_bar(" ", column_width - w);
+        print!("{}", ns);
     } else {
-        let mut w = 0;
-        for sc in subcells {
-            let sc = sc.as_ref();
-            print!("{}", sc);
-            let ssl = UnicodeWidthStr::width(sc);
-            w += ssl;
-        }
+        print!("{}", ns);
         print_str_bar(" ", column_width - w);
     }
 }

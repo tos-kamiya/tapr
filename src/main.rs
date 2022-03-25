@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
@@ -11,8 +14,24 @@ use unicode_width::UnicodeWidthStr;
 const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
 const ANSI_ESCAPE_HEADER_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
 const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[34m", "\u{1b}[32m"];
-const ANSI_ESCAPE_FRAME_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
+const ANSI_ESCAPE_FRAME_COLOR: &[&str] = &["\u{1b}[90m", "\u{1b}[90m"];
 const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
+
+const FRAME_VERTICAL: &str = "\u{2502}";
+const FRAME_HORIZONTAL: &str = "\u{2500}";
+const FRAME_CROSS_TOP: &str = "\u{252c}";
+const FRAME_CROSS_BOTTOM: &str = "\u{2534}";
+const FRAME_CROSS_MIDDLE: &str = "\u{253c}";
+
+// const FRAME_VERTICAL: &str = "\u{2503}";
+// const FRAME_HORIZONTAL: &str = "\u{2501}";
+// const FRAME_CROSS_TOP: &str = "\u{2533}";
+// const FRAME_CROSS_BOTTOM: &str = "\u{253b}";
+// const FRAME_CROSS_MIDDLE: &str = "\u{254b}";
+
+lazy_static! {
+    static ref FRAME_CHAR_WIDTH: usize = UnicodeWidthStr::width(FRAME_VERTICAL);
+}
 
 fn str_width(s: &str) -> usize {
     let mut w: usize = 0;
@@ -72,7 +91,7 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
     if need_to_alloc <= 0 {
         need_to_alloc = 1;
     }
-    let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * (MAX_UNFOLDED_COLUMN_WIDTH + 1)) as isize;
+    let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH) as isize;
     if allocable < 0 {
         return None;
     }
@@ -100,6 +119,39 @@ fn all_digits(subcells: &[&str]) -> bool {
         }
     }
     true
+}
+
+#[derive(Copy, Clone, Debug)]
+enum TMB {
+    Top,
+    Middle,
+    Bottom,
+}
+
+fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width: usize) {
+    assert!(*FRAME_CHAR_WIDTH == 1);
+
+    let column_count = column_widths.len();
+    let cross = match tmb { TMB::Top => FRAME_CROSS_TOP, TMB::Middle => FRAME_CROSS_MIDDLE, TMB::Bottom => FRAME_CROSS_BOTTOM };
+
+    print!("{}", ANSI_ESCAPE_FRAME_COLOR[0]);
+
+    if linenum_width > 0 {
+        for _ in 0..linenum_width {
+            print!("{}", FRAME_HORIZONTAL);
+        }
+        print!("{}", cross);
+    }
+
+    for ci in 0..column_count {
+        for _ in 0..column_widths[ci] {
+            print!("{}", FRAME_HORIZONTAL);
+        }
+        if ci != column_count - 1 {
+            print!("{}", cross);
+        }
+    }
+    println!("{}", ANSI_ESCAPE_RESET_COLOR);
 }
 
 fn print_spaces(width: usize) {
@@ -140,24 +192,23 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
     }
     let subcells_all_digits: Vec<bool> = subcells.iter().map(|ss| all_digits(ss)).collect();
 
-    let mut linenum_printed = false;
+    let mut first_physical_line = true;
     let mut dones: Vec<usize> = vec![0; column_count]; // the indices of subcells already printed
     while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
         // print line number
         if linenum_width > 0 {
             print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
-            if linenum_printed || line_number == 0 {
-                print_spaces(linenum_width);
-            } else {
+            if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
                 print_spaces(linenum_width - linenum_str.len());
                 print!("{}", linenum_str);
+            } else {
+                print_spaces(linenum_width);
             }
-            print!("{}\u{23d0}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2]);
-            linenum_printed = true;
+            print!("{}{}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2], FRAME_VERTICAL);
         }
 
-        // determine the subcells to be printed for each cell of the line
+        // determine the subcells to be printed for each cell in the current line
         let mut todos: Vec<usize> = vec![0; column_count];
         for ci in 0..column_count {
             let csc = &subcells[ci];
@@ -186,12 +237,14 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("{}\u{23d0}", ANSI_ESCAPE_FRAME_COLOR[line_number % 2]);
+            print!("{}{}{}", ANSI_ESCAPE_RESET_COLOR, ANSI_ESCAPE_FRAME_COLOR[line_number % 2], FRAME_VERTICAL);
         }
         println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
         // update indices to mark the subcells "printed"
         dones = todos;
+
+        first_physical_line = false;
     }
 }
 
@@ -200,11 +253,11 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
 #[structopt(name = "tapr")]
 struct Opt {
     /// Treat input as CSV (even when including tab characters)
-    #[structopt(short, long)]
+    #[structopt(short = "c", long)]
     csv: bool,
 
     /// Print line number
-    #[structopt(short, long)]
+    #[structopt(short = "n", long)]
     line_number: bool,
 
     /// Print first line as a header
@@ -217,6 +270,8 @@ struct Opt {
 }
 
 fn main() {
+    assert!(*FRAME_CHAR_WIDTH == 1);
+
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
 
@@ -225,8 +280,14 @@ fn main() {
     let terminal_width: usize = width as usize;
 
     let lines: Vec<String> = if let Some(f) = opt.input {
-        let fp = File::open(f).unwrap();
-        io::BufReader::new(fp).lines().map(|line| line.unwrap()).collect()
+        let f0 = f.clone();
+        if let Ok(fp) = File::open(f) {
+            io::BufReader::new(fp).lines().map(|line| line.unwrap()).collect()
+        } else {
+            let f0 = f0.into_os_string().into_string().unwrap();
+            eprintln!("Error: fail to open file: {}", f0);
+            std::process::exit(1);
+        }
     } else {
         let stdin = io::stdin();
         stdin.lock().lines().map(|line| line.unwrap()).collect()
@@ -248,13 +309,20 @@ fn main() {
     };
     if let Some(column_widths) = cws {
         if opt.header {
+            format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
             for (li, line) in lines.iter().enumerate() {
                 format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+                if li == 0 {
+                    format_print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
+                }
             }
+            format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
         } else {
+            format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
             for (li, line) in lines.iter().enumerate() {
                 format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
             }
+            format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
         }
     } else {
         eprintln!("Error: terminal width too small for input table.");

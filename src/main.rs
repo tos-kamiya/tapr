@@ -7,6 +7,7 @@ use std::io::BufRead;
 use std::path::PathBuf;
 use std::str;
 
+use csv::ReaderBuilder;
 use structopt::StructOpt;
 use terminal_size::{Width, terminal_size};
 use unicode_normalization::UnicodeNormalization;
@@ -35,6 +36,30 @@ lazy_static! {
     static ref FRAME_CHAR_WIDTH: usize = UnicodeWidthStr::width(FRAME_VERTICAL);
 }
 
+
+fn split_csv_line(li: usize, line: &str) -> Vec<String> {
+    let mut rdr = ReaderBuilder::new()
+        .delimiter(b',')
+        .has_headers(false)
+        .from_reader(line.as_bytes());
+    for result in rdr.records() {
+        let record = result.unwrap_or_else(|_e| {
+           eprintln!("Error: line {}: invalid text: {}", li + 1, line);
+           std::process::exit(1);
+        });
+        let v: Vec<String> = record.iter().map(|item| item.to_string()).collect();
+        return v;
+    }
+
+    assert!(false);
+    vec![]
+}
+
+fn split_tsv_line(_li: usize, line: &str) -> Vec<String> {
+    let v: Vec<String> = line.split('\t').map(|item| item.to_string()).collect();
+    v
+}
+
 fn str_width(s: &str) -> usize {
     let mut w: usize = 0;
     for ss in UnicodeSegmentation::graphemes(s, true) {
@@ -52,17 +77,16 @@ fn print_str_bar(s: &str, repeat: usize) {
 #[derive(Copy, Clone, Debug)]
 struct MinMedMax(usize, usize, usize);
 
-fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<MinMedMax> {
-    let lines_len = lines.len();
+fn get_column_widths(line_cells: &[Vec<String>]) -> Vec::<MinMedMax> {
+    let line_count = line_cells.len();
 
     let mut column_width_lists: Vec<Vec<usize>> = vec![];
-    for (ri, line) in lines.iter().enumerate() {
-        let line = line.as_ref();
-        for (ci, field) in line.split(cell_separator).enumerate() {
+    for (ri, cells) in line_cells.iter().enumerate() {
+        for (ci, cell) in cells.iter().enumerate() {
             if ci >= column_width_lists.len() {
-                column_width_lists.push(vec![0; lines_len]);
+                column_width_lists.push(vec![0; line_count]);
             }
-            let w = str_width(field);
+            let w = str_width(cell);
             column_width_lists[ci][ri] = w;
         }
     }
@@ -71,7 +95,7 @@ fn get_column_widths<S: AsRef<str>>(lines: &[S], cell_separator: char) -> Vec::<
     }
 
     let column_count: usize = column_width_lists.len();
-    let median_index = (lines.len() + 1) / 2;
+    let median_index = (line_count + 1) / 2;
 
     let mut column_widths: Vec::<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
     for ci in 0..column_count {
@@ -171,19 +195,20 @@ fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell
     }
 }
 
-fn line_to_subcells<'a>(line: &'a str, cell_separator: char) -> Vec<Vec<&'a str>> {
+fn to_subcells<'a>(cells: &'a [String]) -> Vec<Vec<&'a str>> {
     let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
-    for field in line.split(cell_separator) {
-        let v: Vec<&str> = UnicodeSegmentation::graphemes(field, true).collect(); 
+    for cell in cells {
+        let s: &str = cell;
+        let v: Vec<&str> = UnicodeSegmentation::graphemes(s, true).collect(); 
         subcells.push(v);
     }
     subcells
 }
 
-fn format_print_line(line_number: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
+fn format_print_line(line_number: usize, cells: &[String], column_widths: &[usize], linenum_width: usize) {
     let column_count = column_widths.len();
 
-    let mut subcells = line_to_subcells(line, cell_separator);
+    let mut subcells = to_subcells(cells);
     while subcells.len() < column_count {
         subcells.push(vec![]);
     }
@@ -314,8 +339,15 @@ fn main() {
         0
     };
 
+    let line_cells: Vec<Vec<String>> = if cell_separator == ',' {
+        lines.iter().enumerate().map(|(li, line)| split_csv_line(li, line)).collect()
+    } else {
+        lines.iter().enumerate().map(|(li, line)| split_tsv_line(li, line)).collect()
+    };
+    drop(lines);
+
     // determine width of each column
-    let column_width_minmedmaxs = get_column_widths(&lines, cell_separator);
+    let column_width_minmedmaxs = get_column_widths(&line_cells);
     let cws = if linenum_width > 0 {
         det_print_width_of_columns(&column_width_minmedmaxs, terminal_width - (linenum_width + *FRAME_CHAR_WIDTH))
     } else {
@@ -329,15 +361,15 @@ fn main() {
     // print lines as a table
     format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
     if opt.header {
-        for (li, line) in lines.iter().enumerate() {
-            format_print_line(li, line, cell_separator, &column_widths, linenum_width);
+        for (li, cells) in line_cells.iter().enumerate() {
+            format_print_line(li, cells, &column_widths, linenum_width);
             if li == 0 {
                 format_print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
             }
         }
     } else {
-        for (li, line) in lines.iter().enumerate() {
-            format_print_line(li + 1, line, cell_separator, &column_widths, linenum_width);
+        for (li, cells) in line_cells.iter().enumerate() {
+            format_print_line(li + 1, cells, &column_widths, linenum_width);
         }
     }
     format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);

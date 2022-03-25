@@ -1,7 +1,14 @@
 [package]
 name = "tapr"
+description = "tapr is a table pretty-printer. Outputs a CSV or TSV file as nicely as possible by adjusting column widths."
 version = "0.3.0"
 edition = "2021"
+authors = ["Toshihiro Kamiya <kamiya@mbj.nifty.com>"]
+license = "MIT/Apache-2.0"
+homepage = "https://github.com/tos-kamiya/tapr"
+keywords = ["cli", "utility"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

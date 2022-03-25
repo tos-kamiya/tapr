@@ -171,14 +171,19 @@ fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell
     }
 }
 
-fn format_print_line(line_number: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
-    let column_count = column_widths.len();
-
+fn line_to_subcells<'a>(line: &'a str, cell_separator: char) -> Vec<Vec<&'a str>> {
     let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
     for field in line.split(cell_separator) {
         let v: Vec<&str> = UnicodeSegmentation::graphemes(field, true).collect(); 
         subcells.push(v);
     }
+    subcells
+}
+
+fn format_print_line(line_number: usize, line: &str, cell_separator: char, column_widths: &[usize], linenum_width: usize) {
+    let column_count = column_widths.len();
+
+    let mut subcells = line_to_subcells(line, cell_separator);
     while subcells.len() < column_count {
         subcells.push(vec![]);
     }
@@ -244,9 +249,13 @@ fn format_print_line(line_number: usize, line: &str, cell_separator: char, colum
 #[derive(StructOpt, Debug)]
 #[structopt(name = "tapr")]
 struct Opt {
-    /// Treat input as CSV (even when including tab characters)
+    /// Force treat input as CSV
     #[structopt(short = "c", long)]
     csv: bool,
+
+    /// Force treat input as TSV
+    #[structopt(short = "t", long)]
+    tsv: bool,
 
     /// Print line number
     #[structopt(short = "n", long)]
@@ -266,6 +275,10 @@ fn main() {
 
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
+    if opt.csv && opt.tsv {
+        eprintln!("Error: option --csv and --tsv are mutually exclusive");
+        std::process::exit(1);
+    }
 
     // get terminal width
     let size = terminal_size();
@@ -292,7 +305,7 @@ fn main() {
 
     // determine cell separator
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
-    let cell_separator = if opt.csv || ! includes_tab { ',' } else { '\t' };
+    let cell_separator = if opt.csv || ! opt.tsv && ! includes_tab { ',' } else { '\t' };
 
     // calculate the width for line number (if needed)
     let linenum_width = if opt.line_number {

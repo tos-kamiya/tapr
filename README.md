@@ -3,7 +3,7 @@
 `tapr` is a table pretty-printer. Outputs a CSV or TSV file as nicely as possible by adjusting column widths.
 
 Screenshot:  
-![](docs/images/run1.png)
+![](docs/images/run1u.png)
 
 ## Installation
 
@@ -15,18 +15,18 @@ cargo install tapr
 
 ```
 USAGE:
-    tapr [FLAGS] [input]
+    tapr [FLAGS] <input>
 
 FLAGS:
-    -c, --csv            Force treat input as CSV
+    -c, --csv            Force treats input file as CSV
     -h, --help           Prints help information
-    -H, --header         Print first line as a header
-    -n, --line-number    Print line number
-    -t, --tsv            Force treat input as TSV
+    -H, --header         Prints first line as a header
+    -n, --line-number    Prints line number
+    -t, --tsv            Force treats input file as TSV
     -V, --version        Prints version information
 
 ARGS:
-    <input>    Input file
+    <input>    Input file. Specify `-` to read from the standard input
 ```
 
 ## License

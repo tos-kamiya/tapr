@@ -14,25 +14,25 @@ use tapr::table_reader::*;
 #[derive(StructOpt, Debug)]
 #[structopt(name = "tapr")]
 struct Opt {
-    /// Force treat input as CSV
+    /// Force treats input file as CSV
     #[structopt(short = "c", long)]
     csv: bool,
 
-    /// Force treat input as TSV
+    /// Force treats input file as TSV
     #[structopt(short = "t", long)]
     tsv: bool,
 
-    /// Print line number
+    /// Prints line number
     #[structopt(short = "n", long)]
     line_number: bool,
 
-    /// Print first line as a header
+    /// Prints first line as a header
     #[structopt(short = "H", long)]
     header: bool,
 
-    /// Input file
+    /// Input file. Specify `-` to read from the standard input.
     #[structopt(parse(from_os_str))]
-    input: Option<PathBuf>,
+    input: PathBuf,
 }
 
 fn main() {
@@ -51,23 +51,19 @@ fn main() {
     let terminal_width: usize = width as usize;
 
     // read input lines
-    let lines: Vec<String> = match opt.input {
-        None => {
-            let stdin = io::stdin();
-            stdin.lock().lines().map(|line| line.unwrap()).collect()
-        }
-        Some(f) => {
-            let f0 = f.clone();
-            if let Ok(fp) = File::open(f) {
-                io::BufReader::new(fp)
-                    .lines()
-                    .map(|line| line.unwrap())
-                    .collect()
-            } else {
-                let f0 = f0.into_os_string().into_string().unwrap();
-                eprintln!("Error: fail to open file: {}", f0);
-                std::process::exit(1);
-            }
+    let input_file = opt.input.clone().into_os_string().into_string().unwrap();
+    let lines: Vec<String> = if input_file == "-" {
+        let stdin = io::stdin();
+        stdin.lock().lines().map(|line| line.unwrap()).collect()
+    } else {
+        if let Ok(fp) = File::open(opt.input) {
+            io::BufReader::new(fp)
+                .lines()
+                .map(|line| line.unwrap())
+                .collect()
+        } else {
+            eprintln!("Error: fail to open file: {}", input_file);
+            std::process::exit(1);
         }
     };
 

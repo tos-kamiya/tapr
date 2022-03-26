@@ -29,6 +29,12 @@ ARGS:
     <input>    Input file. Specify `-` to read from the standard input
 ```
 
+To pipe `tapr` to `less`, do not forget to specify `--raw-control-chars` option to `less`:
+
+```sh
+...(some command)... | tapr - | less -R
+```
+
 ## License
 
 MIT/Apache-2.0

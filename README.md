@@ -15,7 +15,7 @@ cargo install tapr
 
 ```
 USAGE:
-    tapr [FLAGS] <input>
+    tapr [FLAGS] [OPTIONS] <input>
 
 FLAGS:
     -c, --csv            Force treats input file as CSV
@@ -24,6 +24,9 @@ FLAGS:
     -n, --line-number    Prints line number
     -t, --tsv            Force treats input file as TSV
     -V, --version        Prints version information
+
+OPTIONS:
+        --line-sampling <line-sampling>    Sampling size of lines to determine width of each column [default: 100]
 
 ARGS:
     <input>    Input file. Specify `-` to read from the standard input

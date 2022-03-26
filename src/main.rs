@@ -22,37 +22,35 @@ const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
 
 const FRAME_VERTICAL: &str = "\u{2502}";
 const FRAME_HORIZONTAL: &str = "\u{2500}";
-const FRAME_CROSS_TOP: &str = "\u{252c}";
-const FRAME_CROSS_BOTTOM: &str = "\u{2534}";
-const FRAME_CROSS_MIDDLE: &str = "\u{253c}";
+const FRAME_CROSSING_TOP: &str = "\u{252c}";
+const FRAME_CROSSING_BOTTOM: &str = "\u{2534}";
+const FRAME_CROSSING_MIDDLE: &str = "\u{253c}";
 
 // const FRAME_VERTICAL: &str = "\u{2503}";
 // const FRAME_HORIZONTAL: &str = "\u{2501}";
-// const FRAME_CROSS_TOP: &str = "\u{2533}";
-// const FRAME_CROSS_BOTTOM: &str = "\u{253b}";
-// const FRAME_CROSS_MIDDLE: &str = "\u{254b}";
+// const FRAME_CROSSING_TOP: &str = "\u{2533}";
+// const FRAME_CROSSING_BOTTOM: &str = "\u{253b}";
+// const FRAME_CROSSING_MIDDLE: &str = "\u{254b}";
 
 lazy_static! {
     static ref FRAME_CHAR_WIDTH: usize = UnicodeWidthStr::width(FRAME_VERTICAL);
 }
-
 
 fn split_csv_line(li: usize, line: &str) -> Vec<String> {
     let mut rdr = ReaderBuilder::new()
         .delimiter(b',')
         .has_headers(false)
         .from_reader(line.as_bytes());
-    for result in rdr.records() {
+    if let Some(result) = rdr.records().next() {
         let record = result.unwrap_or_else(|_e| {
            eprintln!("Error: line {}: invalid text: {}", li + 1, line);
            std::process::exit(1);
         });
         let v: Vec<String> = record.iter().map(|item| item.to_string()).collect();
-        return v;
+        v
+    } else {
+        unreachable!();
     }
-
-    assert!(false);
-    vec![]
 }
 
 fn split_tsv_line(_li: usize, line: &str) -> Vec<String> {
@@ -77,7 +75,7 @@ fn print_str_bar(s: &str, repeat: usize) {
 #[derive(Copy, Clone, Debug)]
 struct MinMedMax(usize, usize, usize);
 
-fn get_column_widths(line_cells: &[Vec<String>]) -> Vec::<MinMedMax> {
+fn get_raw_column_widths(line_cells: &[Vec<String>]) -> Vec::<MinMedMax> {
     let line_count = line_cells.len();
 
     let mut column_width_lists: Vec<Vec<usize>> = vec![];
@@ -106,11 +104,12 @@ fn get_column_widths(line_cells: &[Vec<String>]) -> Vec::<MinMedMax> {
     column_widths
 }
 
-fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_width: usize) -> Option<Vec<usize>> {
+fn det_print_column_widths(column_width_minmedmaxs: &[MinMedMax], terminal_width: usize) -> Option<Vec<usize>> {
     let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
 
     let column_count: usize = column_width_minmedmaxs.len();
 
+    // check if each column need to more than min width (MAX_UNFOLDED_COLUMN_WIDTH)
     let mut need_to_alloc: usize = 0;
     let mut extra_allocable: usize = 0;
     for mmm in column_width_minmedmaxs {
@@ -123,11 +122,14 @@ fn det_print_width_of_columns(column_width_minmedmaxs: &[MinMedMax], terminal_wi
     if need_to_alloc == 0 {
         need_to_alloc = 1;
     }
+
+    // calculate how many chars are allocable to columns need more width
     let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH) as isize;
     if allocable < 0 {
         return None;
     }
 
+    // allocate widths to each column
     let allocable = allocable as usize;
     let mut column_allocations: Vec<usize> = vec![MAX_UNFOLDED_COLUMN_WIDTH; column_count];
     for ci in 0..column_count {
@@ -160,11 +162,11 @@ enum TMB {
     Bottom,
 }
 
-fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width: usize) {
+fn print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width: usize) {
     assert!(*FRAME_CHAR_WIDTH == 1);
 
     let column_count = column_widths.len();
-    let cross = match tmb { TMB::Top => FRAME_CROSS_TOP, TMB::Middle => FRAME_CROSS_MIDDLE, TMB::Bottom => FRAME_CROSS_BOTTOM };
+    let cross = match tmb { TMB::Top => FRAME_CROSSING_TOP, TMB::Middle => FRAME_CROSSING_MIDDLE, TMB::Bottom => FRAME_CROSSING_BOTTOM };
 
     print!("{}", ANSI_ESCAPE_FRAME_COLOR);
 
@@ -182,7 +184,7 @@ fn format_print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width
     println!("{}", ANSI_ESCAPE_RESET_COLOR);
 }
 
-fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcells_all_digits: bool) {
+fn print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcells_all_digits: bool) {
     let w: usize = subcells.iter().map(|s| UnicodeWidthStr::width(s.as_ref())).sum();
     let s: String = subcells.iter().map(|s| s.as_ref()).collect();
     let ns: String = s.nfc().to_string();
@@ -195,7 +197,7 @@ fn format_print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell
     }
 }
 
-fn to_subcells<'a>(cells: &'a [String]) -> Vec<Vec<&'a str>> {
+fn to_subcells(cells: &[String]) -> Vec<Vec<&str>> {
     let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
     for cell in cells {
         let s: &str = cell;
@@ -205,15 +207,17 @@ fn to_subcells<'a>(cells: &'a [String]) -> Vec<Vec<&'a str>> {
     subcells
 }
 
-fn format_print_line(line_number: usize, cells: &[String], column_widths: &[usize], linenum_width: usize) {
+fn print_line(line_number: usize, cells: &[String], column_widths: &[usize], linenum_width: usize) {
     let column_count = column_widths.len();
 
+    // split each cells into unicode chars
     let mut subcells = to_subcells(cells);
     while subcells.len() < column_count {
         subcells.push(vec![]);
     }
     let subcells_all_digits: Vec<bool> = subcells.iter().map(|ss| all_digits(ss)).collect();
 
+    // print cells
     let mut first_physical_line = true;
     let mut dones: Vec<usize> = vec![0; column_count]; // the indices of subcells already printed
     while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
@@ -255,7 +259,7 @@ fn format_print_line(line_number: usize, cells: &[String], column_widths: &[usiz
             let sadc = subcells_all_digits[ci];
             let ac = if line_number == 0 { ANSI_ESCAPE_HEADER_COLOR } else { ANSI_ESCAPE_TEXT_COLOR };
             print!("{}", ac[line_number % 2]);
-            format_print_cell(&csc[dones[ci]..todos[ci]], cwc, sadc);
+            print_cell(&csc[dones[ci]..todos[ci]], cwc, sadc);
             if ci == column_count - 1 {
                 break; // for ci
             }
@@ -339,6 +343,7 @@ fn main() {
         0
     };
 
+    // split each line into cells
     let line_cells: Vec<Vec<String>> = if cell_separator == ',' {
         lines.iter().enumerate().map(|(li, line)| split_csv_line(li, line)).collect()
     } else {
@@ -347,11 +352,11 @@ fn main() {
     drop(lines);
 
     // determine width of each column
-    let column_width_minmedmaxs = get_column_widths(&line_cells);
+    let column_width_minmedmaxs = get_raw_column_widths(&line_cells);
     let cws = if linenum_width > 0 {
-        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width - (linenum_width + *FRAME_CHAR_WIDTH))
+        det_print_column_widths(&column_width_minmedmaxs, terminal_width - (linenum_width + *FRAME_CHAR_WIDTH))
     } else {
-        det_print_width_of_columns(&column_width_minmedmaxs, terminal_width)
+        det_print_column_widths(&column_width_minmedmaxs, terminal_width)
     };
     let column_widths = cws.unwrap_or_else(|| {
         eprintln!("Error: terminal width too small for input table.");
@@ -359,18 +364,18 @@ fn main() {
     });
 
     // print lines as a table
-    format_print_horizontal_line(TMB::Top, &column_widths, linenum_width);
+    print_horizontal_line(TMB::Top, &column_widths, linenum_width);
     if opt.header {
         for (li, cells) in line_cells.iter().enumerate() {
-            format_print_line(li, cells, &column_widths, linenum_width);
+            print_line(li, cells, &column_widths, linenum_width);
             if li == 0 {
-                format_print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
+                print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
             }
         }
     } else {
         for (li, cells) in line_cells.iter().enumerate() {
-            format_print_line(li + 1, cells, &column_widths, linenum_width);
+            print_line(li + 1, cells, &column_widths, linenum_width);
         }
     }
-    format_print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
+    print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
 }

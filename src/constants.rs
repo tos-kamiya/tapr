@@ -23,4 +23,3 @@ pub const FRAME_CROSSING_MIDDLE: &str = "\u{253c}";
 lazy_static! {
     pub static ref FRAME_CHAR_WIDTH: usize = UnicodeWidthStr::width(FRAME_VERTICAL);
 }
-

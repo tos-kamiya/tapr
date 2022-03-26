@@ -4,11 +4,11 @@ use std::io::BufRead;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
-use terminal_size::{Width, terminal_size};
+use terminal_size::{terminal_size, Width};
 
 use tapr::constants::*;
-use tapr::table_reader::*;
 use tapr::formatter::*;
+use tapr::table_reader::*;
 
 /// Table Pretty-print. print TSV or CSV file.
 #[derive(StructOpt, Debug)]
@@ -55,22 +55,29 @@ fn main() {
         None => {
             let stdin = io::stdin();
             stdin.lock().lines().map(|line| line.unwrap()).collect()
-        },
+        }
         Some(f) => {
             let f0 = f.clone();
             if let Ok(fp) = File::open(f) {
-                io::BufReader::new(fp).lines().map(|line| line.unwrap()).collect()
+                io::BufReader::new(fp)
+                    .lines()
+                    .map(|line| line.unwrap())
+                    .collect()
             } else {
                 let f0 = f0.into_os_string().into_string().unwrap();
                 eprintln!("Error: fail to open file: {}", f0);
                 std::process::exit(1);
             }
-        },
+        }
     };
 
     // determine cell separator
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
-    let cell_separator = if opt.csv || ! opt.tsv && ! includes_tab { ',' } else { '\t' };
+    let cell_separator = if opt.csv || !opt.tsv && !includes_tab {
+        ','
+    } else {
+        '\t'
+    };
 
     // calculate the width for line number (if needed)
     let linenum_width = if opt.line_number {
@@ -81,9 +88,17 @@ fn main() {
 
     // split each line into cells
     let line_cells: Vec<Vec<String>> = if cell_separator == ',' {
-        lines.iter().enumerate().map(|(li, line)| split_csv_line(li, line)).collect()
+        lines
+            .iter()
+            .enumerate()
+            .map(|(li, line)| split_csv_line(li, line))
+            .collect()
     } else {
-        lines.iter().enumerate().map(|(li, line)| split_tsv_line(li, line)).collect()
+        lines
+            .iter()
+            .enumerate()
+            .map(|(li, line)| split_tsv_line(li, line))
+            .collect()
     };
     drop(lines);
     let line_cells: Vec<&[String]> = line_cells.iter().map(|lc| lc.as_ref()).collect();
@@ -91,7 +106,10 @@ fn main() {
     // determine width of each column
     let column_width_minmedmaxs = get_raw_column_widths(&line_cells);
     let cws = if linenum_width > 0 {
-        det_print_column_widths(&column_width_minmedmaxs, terminal_width - (linenum_width + *FRAME_CHAR_WIDTH))
+        det_print_column_widths(
+            &column_width_minmedmaxs,
+            terminal_width - (linenum_width + *FRAME_CHAR_WIDTH),
+        )
     } else {
         det_print_column_widths(&column_width_minmedmaxs, terminal_width)
     };

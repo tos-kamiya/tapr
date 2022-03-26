@@ -7,7 +7,7 @@ use super::constants::*;
 fn all_digits(subcells: &[&str]) -> bool {
     for item in subcells {
         for c in item.chars() {
-            if ! ('0'..='9').contains(&c) {
+            if !('0'..='9').contains(&c) {
                 return false;
             }
         }
@@ -32,7 +32,11 @@ pub fn print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width: u
     assert!(*FRAME_CHAR_WIDTH == 1);
 
     let column_count = column_widths.len();
-    let cross = match tmb { TMB::Top => FRAME_CROSSING_TOP, TMB::Middle => FRAME_CROSSING_MIDDLE, TMB::Bottom => FRAME_CROSSING_BOTTOM };
+    let cross = match tmb {
+        TMB::Top => FRAME_CROSSING_TOP,
+        TMB::Middle => FRAME_CROSSING_MIDDLE,
+        TMB::Bottom => FRAME_CROSSING_BOTTOM,
+    };
 
     print!("{}", ANSI_ESCAPE_FRAME_COLOR);
 
@@ -51,7 +55,10 @@ pub fn print_horizontal_line(tmb: TMB, column_widths: &[usize], linenum_width: u
 }
 
 fn print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell_right_aligns: bool) {
-    let w: usize = subcells.iter().map(|s| UnicodeWidthStr::width(s.as_ref())).sum();
+    let w: usize = subcells
+        .iter()
+        .map(|s| UnicodeWidthStr::width(s.as_ref()))
+        .sum();
     let s: String = subcells.iter().map(|s| s.as_ref()).collect();
     let ns: String = s.nfc().to_string();
     if subcell_right_aligns {
@@ -66,13 +73,18 @@ fn print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, subcell_right_
 fn to_subcells<S: AsRef<str>>(cells: &[S]) -> Vec<Vec<&str>> {
     let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
     for cell in cells {
-        let v: Vec<&str> = UnicodeSegmentation::graphemes(cell.as_ref(), true).collect(); 
+        let v: Vec<&str> = UnicodeSegmentation::graphemes(cell.as_ref(), true).collect();
         subcells.push(v);
     }
     subcells
 }
 
-pub fn print_line<S: AsRef<str>>(line_number: usize, cells: &[S], column_widths: &[usize], linenum_width: usize) {
+pub fn print_line<S: AsRef<str>>(
+    line_number: usize,
+    cells: &[S],
+    column_widths: &[usize],
+    linenum_width: usize,
+) {
     let column_count = column_widths.len();
 
     // split each cells into unicode chars
@@ -122,13 +134,20 @@ pub fn print_line<S: AsRef<str>>(line_number: usize, cells: &[S], column_widths:
             let csc = &subcells[ci];
             let cwc = column_widths[ci];
             let srac = subcell_right_aligns[ci];
-            let ac = if line_number == 0 { ANSI_ESCAPE_HEADER_COLOR } else { ANSI_ESCAPE_TEXT_COLOR };
+            let ac = if line_number == 0 {
+                ANSI_ESCAPE_HEADER_COLOR
+            } else {
+                ANSI_ESCAPE_TEXT_COLOR
+            };
             print!("{}", ac[line_number % 2]);
             print_cell(&csc[dones[ci]..todos[ci]], cwc, srac);
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("{}{}{}", ANSI_ESCAPE_RESET_COLOR, ANSI_ESCAPE_FRAME_COLOR, FRAME_VERTICAL);
+            print!(
+                "{}{}{}",
+                ANSI_ESCAPE_RESET_COLOR, ANSI_ESCAPE_FRAME_COLOR, FRAME_VERTICAL
+            );
         }
         println!("{}", ANSI_ESCAPE_RESET_COLOR);
 
@@ -138,7 +157,6 @@ pub fn print_line<S: AsRef<str>>(line_number: usize, cells: &[S], column_widths:
         first_physical_line = false;
     }
 }
-
 
 fn str_width(s: &str) -> usize {
     let mut w: usize = 0;
@@ -151,7 +169,7 @@ fn str_width(s: &str) -> usize {
 #[derive(Copy, Clone, Debug)]
 pub struct MinMedMax(usize, usize, usize);
 
-pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec::<MinMedMax> {
+pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec<MinMedMax> {
     let line_count = line_cells.len();
 
     let mut column_width_lists: Vec<Vec<usize>> = vec![];
@@ -171,7 +189,7 @@ pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec::<MinMed
     let column_count: usize = column_width_lists.len();
     let median_index = (line_count + 1) / 2;
 
-    let mut column_widths: Vec::<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
+    let mut column_widths: Vec<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
     for ci in 0..column_count {
         let cwlc: &[usize] = &column_width_lists[ci];
         column_widths[ci] = MinMedMax(cwlc[0], cwlc[median_index], cwlc[cwlc.len() - 1]);
@@ -180,7 +198,10 @@ pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec::<MinMed
     column_widths
 }
 
-pub fn det_print_column_widths(column_width_minmedmaxs: &[MinMedMax], terminal_width: usize) -> Option<Vec<usize>> {
+pub fn det_print_column_widths(
+    column_width_minmedmaxs: &[MinMedMax],
+    terminal_width: usize,
+) -> Option<Vec<usize>> {
     let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
 
     let column_count: usize = column_width_minmedmaxs.len();
@@ -200,7 +221,9 @@ pub fn det_print_column_widths(column_width_minmedmaxs: &[MinMedMax], terminal_w
     }
 
     // calculate how many chars are allocable to columns need more width
-    let allocable: isize = (terminal_width + extra_allocable) as isize - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH) as isize;
+    let allocable: isize = (terminal_width + extra_allocable) as isize
+        - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH)
+            as isize;
     if allocable < 0 {
         return None;
     }
@@ -211,11 +234,14 @@ pub fn det_print_column_widths(column_width_minmedmaxs: &[MinMedMax], terminal_w
     for ci in 0..column_count {
         let mmm = column_width_minmedmaxs[ci];
         if mid_max(&mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
-            column_allocations[ci] += std::cmp::min(mmm.2 - MAX_UNFOLDED_COLUMN_WIDTH, (mid_max(&mmm) - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc);
+            column_allocations[ci] += std::cmp::min(
+                mmm.2 - MAX_UNFOLDED_COLUMN_WIDTH,
+                (mid_max(&mmm) - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc,
+            );
         } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
             column_allocations[ci] -= MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
         }
     }
 
     Some(column_allocations)
-}    
+}

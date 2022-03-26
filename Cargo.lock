@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "tapr"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "csv",
  "lazy_static",

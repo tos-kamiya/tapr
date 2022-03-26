@@ -85,11 +85,7 @@ pub fn print_line<S: AsRef<str>>(
     column_widths: &[usize],
     linenum_width: usize,
 ) {
-    if cells.len() == 0 {
-        println!();
-        return;
-    }
-
+    assert!(cells.len() > 0);
     let column_count = column_widths.len();
 
     // split each cells into unicode chars
@@ -203,6 +199,9 @@ pub fn det_print_column_widths(
     let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
 
     let column_count: usize = column_width_minmedmaxs.len();
+    if column_count == 0 {
+        return Some(vec![]);
+    }
 
     // check if each column need to more than min width (MAX_UNFOLDED_COLUMN_WIDTH)
     let mut need_to_alloc: usize = 0;

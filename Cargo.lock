@@ -226,11 +226,13 @@ version = "0.5.0"
 dependencies = [
  "csv",
  "lazy_static",
+ "libc",
  "structopt",
  "terminal_size",
  "unicode-normalization",
  "unicode-segmentation",
  "unicode-width",
+ "winapi",
 ]
 
 [[package]]

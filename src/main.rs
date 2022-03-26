@@ -4,10 +4,10 @@ use std::io::BufRead;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
-use terminal_size::{terminal_size, Width};
 
 use tapr::constants::*;
 use tapr::formatter::*;
+use tapr::safe_terminal_size::*;
 use tapr::table_reader::*;
 
 /// Table Pretty-print. print TSV or CSV file.
@@ -46,7 +46,7 @@ fn main() {
     }
 
     // get terminal width
-    let size = terminal_size();
+    let size = safe_terminal_size();
     let (Width(width), _) = size.unwrap();
     let terminal_width: usize = width as usize;
 

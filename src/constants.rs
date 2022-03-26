@@ -4,7 +4,7 @@ use unicode_width::UnicodeWidthStr;
 
 pub const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
 pub const ANSI_ESCAPE_TEXT_COLORS: &[&str] = &[
-    "\u{1b}[37m", // header line 
+    "\u{1b}[37m", // header line
     "\u{1b}[34m", // even line
     "\u{1b}[32m", // odd line
 ];

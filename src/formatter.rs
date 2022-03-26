@@ -85,7 +85,7 @@ pub fn print_line<S: AsRef<str>>(
     column_widths: &[usize],
     linenum_width: usize,
 ) {
-    assert!(cells.len() > 0);
+    assert!(!cells.is_empty());
     let column_count = column_widths.len();
 
     // split each cells into unicode chars
@@ -101,7 +101,12 @@ pub fn print_line<S: AsRef<str>>(
     while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
         // print line number
         if linenum_width > 0 {
-            print!("{}", ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 { 0 } else { 1 + line_number % 2 }]);
+            let c = ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 {
+                0
+            } else {
+                1 + line_number % 2
+            }];
+            print!("{}", c);
             if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
                 print_str_bar(" ", linenum_width - linenum_str.len());
@@ -135,7 +140,12 @@ pub fn print_line<S: AsRef<str>>(
             let csc = &subcells[ci];
             let cwc = column_widths[ci];
             let srac = subcell_right_aligns[ci];
-            print!("{}", ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 { 0 } else { 1 + line_number % 2 }]);
+            let c = ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 {
+                0
+            } else {
+                1 + line_number % 2
+            }];
+            print!("{}", c);
             print_cell(&csc[dones[ci]..todos[ci]], cwc, srac);
             if ci == column_count - 1 {
                 break; // for ci

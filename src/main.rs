@@ -10,7 +10,11 @@ use tapr::formatter::*;
 use tapr::safe_terminal_size::*;
 use tapr::table_reader::*;
 
-fn determine_column_widths(line_cells_sampled: Vec<&[String]>, linenum_width: usize, terminal_width: usize) -> Vec<usize> {
+fn determine_column_widths(
+    line_cells_sampled: Vec<&[String]>,
+    linenum_width: usize,
+    terminal_width: usize,
+) -> Vec<usize> {
     let column_width_minmedmaxs = get_raw_column_widths(&line_cells_sampled);
     let cws = if linenum_width > 0 {
         det_print_column_widths(
@@ -64,7 +68,11 @@ fn main() {
         eprintln!("Error: option --csv and --tsv are mutually exclusive");
         std::process::exit(1);
     }
-    let line_sampling = if opt.line_sampling == 0 { 1 } else { opt.line_sampling };
+    let line_sampling = if opt.line_sampling == 0 {
+        1
+    } else {
+        opt.line_sampling
+    };
 
     // get terminal width
     let size = safe_terminal_size();
@@ -88,7 +96,7 @@ fn main() {
         }
     };
 
-    if lines.len() == 0 {
+    if lines.is_empty() {
         return;
     }
 
@@ -118,14 +126,16 @@ fn main() {
         .enumerate()
         .map(|(li, line)| split_to_cells(li, line))
         .collect();
-    let line_cells_sampled: Vec<&[String]> = line_cells_sampled.iter().map(|lc| lc.as_ref()).collect();
-    let column_widths: Vec<usize> = determine_column_widths(line_cells_sampled, linenum_width, terminal_width);
+    let line_cells_sampled: Vec<&[String]> =
+        line_cells_sampled.iter().map(|lc| lc.as_ref()).collect();
+    let column_widths: Vec<usize> =
+        determine_column_widths(line_cells_sampled, linenum_width, terminal_width);
 
     // print lines as a table
     print_horizontal_line(TMB::Top, &column_widths, linenum_width);
     if opt.header {
         for (li, line) in lines.iter().enumerate() {
-            let line = if line == "" { " " } else { line };
+            let line = if line.is_empty() { " " } else { line };
             let cells = split_to_cells(li, line);
             print_line(li, &cells, &column_widths, linenum_width);
             if li == 0 {
@@ -134,7 +144,7 @@ fn main() {
         }
     } else {
         for (li, line) in lines.iter().enumerate() {
-            let line = if line == "" { " " } else { line };
+            let line = if line.is_empty() { " " } else { line };
             let cells = split_to_cells(li, line);
             print_line(li + 1, &cells, &column_widths, linenum_width);
         }

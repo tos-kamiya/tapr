@@ -105,7 +105,7 @@ pub fn print_line<S: AsRef<str>>(
     while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
         // print line number
         if linenum_width > 0 {
-            print!("{}", ANSI_ESCAPE_TEXT_COLOR[line_number % 2]);
+            print!("{}", ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 { 0 } else { 1 + line_number % 2 }]);
             if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
                 print_str_bar(" ", linenum_width - linenum_str.len());
@@ -139,12 +139,7 @@ pub fn print_line<S: AsRef<str>>(
             let csc = &subcells[ci];
             let cwc = column_widths[ci];
             let srac = subcell_right_aligns[ci];
-            let ac = if line_number == 0 {
-                ANSI_ESCAPE_HEADER_COLOR
-            } else {
-                ANSI_ESCAPE_TEXT_COLOR
-            };
-            print!("{}", ac[line_number % 2]);
+            print!("{}", ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 { 0 } else { 1 + line_number % 2 }]);
             print_cell(&csc[dones[ci]..todos[ci]], cwc, srac);
             if ci == column_count - 1 {
                 break; // for ci
@@ -164,11 +159,9 @@ pub fn print_line<S: AsRef<str>>(
 }
 
 fn str_width(s: &str) -> usize {
-    let mut w: usize = 0;
-    for ss in UnicodeSegmentation::graphemes(s, true) {
-        w += UnicodeWidthStr::width(ss);
-    }
-    w
+    UnicodeSegmentation::graphemes(s, true)
+        .map(UnicodeWidthStr::width)
+        .sum()
 }
 
 #[derive(Copy, Clone, Debug)]

@@ -10,14 +10,12 @@ pub fn split_csv_line(li: usize, line: &str) -> Vec<String> {
             eprintln!("Error: line {}: invalid text: {}", li + 1, line);
             std::process::exit(1);
         });
-        let v: Vec<String> = record.iter().map(|item| item.to_string()).collect();
-        v
+        record.iter().map(|item| item.to_string()).collect()
     } else {
         vec![]
     }
 }
 
 pub fn split_tsv_line(_li: usize, line: &str) -> Vec<String> {
-    let v: Vec<String> = line.split('\t').map(|item| item.to_string()).collect();
-    v
+    line.split('\t').map(|item| item.to_string()).collect()
 }

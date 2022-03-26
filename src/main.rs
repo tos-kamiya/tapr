@@ -83,19 +83,16 @@ fn main() {
     };
 
     // split each line into cells
-    let line_cells: Vec<Vec<String>> = if cell_separator == ',' {
-        lines
-            .iter()
-            .enumerate()
-            .map(|(li, line)| split_csv_line(li, line))
-            .collect()
+    let split_to_cells = if cell_separator == ',' {
+        split_csv_line
     } else {
-        lines
-            .iter()
-            .enumerate()
-            .map(|(li, line)| split_tsv_line(li, line))
-            .collect()
+        split_tsv_line
     };
+    let line_cells: Vec<Vec<String>> = lines
+        .iter()
+        .enumerate()
+        .map(|(li, line)| split_to_cells(li, line))
+        .collect();
     drop(lines);
     let line_cells: Vec<&[String]> = line_cells.iter().map(|lc| lc.as_ref()).collect();
 

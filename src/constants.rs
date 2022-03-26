@@ -3,8 +3,11 @@ use lazy_static;
 use unicode_width::UnicodeWidthStr;
 
 pub const MAX_UNFOLDED_COLUMN_WIDTH: usize = 7;
-pub const ANSI_ESCAPE_HEADER_COLOR: &[&str] = &["\u{1b}[37m", "\u{1b}[37m"];
-pub const ANSI_ESCAPE_TEXT_COLOR: &[&str] = &["\u{1b}[34m", "\u{1b}[32m"];
+pub const ANSI_ESCAPE_TEXT_COLORS: &[&str] = &[
+    "\u{1b}[37m", // header line 
+    "\u{1b}[34m", // even line
+    "\u{1b}[32m", // odd line
+];
 pub const ANSI_ESCAPE_FRAME_COLOR: &str = "\u{1b}[90m";
 pub const ANSI_ESCAPE_RESET_COLOR: &str = "\u{1b}[0m";
 

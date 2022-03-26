@@ -13,7 +13,7 @@ pub fn split_csv_line(li: usize, line: &str) -> Vec<String> {
         let v: Vec<String> = record.iter().map(|item| item.to_string()).collect();
         v
     } else {
-        unreachable!();
+        vec![]
     }
 }
 

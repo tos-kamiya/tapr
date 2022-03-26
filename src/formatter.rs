@@ -85,6 +85,11 @@ pub fn print_line<S: AsRef<str>>(
     column_widths: &[usize],
     linenum_width: usize,
 ) {
+    if cells.len() == 0 {
+        println!();
+        return;
+    }
+
     let column_count = column_widths.len();
 
     // split each cells into unicode chars

@@ -13,13 +13,13 @@ pub fn split_csv_line(li: usize, line: &str) -> Result<Vec<String>, SplitLineErr
         .has_headers(false)
         .from_reader(line.as_bytes());
     if let Some(result) = rdr.records().next() {
-        match result {
-            Ok(record) => {
-                Ok(record.iter().map(|item| item.to_string()).collect())
-            }
-            Err(_) => {
-                Err(SplitLineError::InvalidText { linenum: li + 1, text: line.to_string() })
-            }
+        if let Ok(record) = result {
+            Ok(record.iter().map(|item| item.to_string()).collect())
+        } else {
+            Err(SplitLineError::InvalidText {
+                linenum: li + 1,
+                text: line.to_string(),
+            })
         }
     } else {
         Ok(vec![])

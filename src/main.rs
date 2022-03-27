@@ -14,20 +14,19 @@ use tapr::table_reader::*;
 use tapr::utils::*;
 
 fn determine_column_widths(
-    line_cells_sampled: Vec<&[String]>,
+    line_cells: Vec<&[String]>,
     linenum_width: usize,
     terminal_width: usize,
 ) -> Result<Vec<usize>, DetColumnWidthError> {
-    let column_width_minmedmaxs = get_raw_column_widths(&line_cells_sampled);
-    let cws = if linenum_width > 0 {
+    let column_width_minmedmaxs = get_raw_column_widths(&line_cells);
+    if linenum_width > 0 {
         det_print_column_widths(
             &column_width_minmedmaxs,
-            terminal_width - (linenum_width + *FRAME_CHAR_WIDTH),
+            terminal_width - (linenum_width + *frame::CHAR_WIDTH),
         )
     } else {
         det_print_column_widths(&column_width_minmedmaxs, terminal_width)
-    };
-    cws
+    }
 }
 
 /// Table Pretty-print. print TSV or CSV file.
@@ -66,7 +65,7 @@ pub enum CommandLineParseError {
 }
 
 fn main() -> anyhow::Result<()> {
-    assert!(*FRAME_CHAR_WIDTH == 1);
+    assert!(*frame::CHAR_WIDTH == 1);
 
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
@@ -77,7 +76,7 @@ fn main() -> anyhow::Result<()> {
 
     // get terminal width
     let size = safe_terminal_size();
-    let (Width(width), _) = size.with_context(|| format!("fail to detect terminal width"))?;
+    let (Width(width), _) = size.with_context(|| "fail to detect terminal width")?;
     let terminal_width: usize = width as usize;
 
     // read input lines
@@ -86,7 +85,8 @@ fn main() -> anyhow::Result<()> {
         let stdin = io::stdin();
         stdin.lock().lines().map(|line| line.unwrap()).collect()
     } else {
-        let fp = File::open(opt.input).with_context(|| format!("fail to open file: {}", input_file))?;
+        let fp =
+            File::open(opt.input).with_context(|| format!("fail to open file: {}", input_file))?;
         io::BufReader::new(fp)
             .lines()
             .map(|line| line.unwrap())
@@ -104,24 +104,28 @@ fn main() -> anyhow::Result<()> {
     // determine width of each column
     let includes_tab = lines.iter().any(|line| line.contains('\t'));
     let cell_separator = (opt.csv || !opt.tsv && !includes_tab).q(',', '\t');
-    let split_to_cells: fn(usize, &str) -> Result<Vec<String>, _> = (cell_separator == ',').q(split_csv_line, split_tsv_line);
+    let split_to_cells: fn(usize, &str) -> Result<Vec<String>, _> =
+        (cell_separator == ',').q(split_csv_line, split_tsv_line);
+    let lines_sampled = &lines[..cmp::min(lines.len(), line_sampling)];
     let mut line_cells_sampled: Vec<Vec<String>> = vec![];
-    for (li, line) in lines[..cmp::min(lines.len(), line_sampling)].iter().enumerate() {
+    for (li, line) in lines_sampled.iter().enumerate() {
         let cells = split_to_cells(li, line)?;
         line_cells_sampled.push(cells);
     }
-    let line_cells_sampled: Vec<&[String]> = line_cells_sampled.iter().map(|lc| lc.as_ref()).collect();
-    let column_widths: Vec<usize> = determine_column_widths(line_cells_sampled, linenum_width, terminal_width)?;
+    let line_cells_sampled: Vec<&[String]> =
+        line_cells_sampled.iter().map(|lc| lc.as_ref()).collect();
+    let column_widths: Vec<usize> =
+        determine_column_widths(line_cells_sampled, linenum_width, terminal_width)?;
 
     // print lines as a table
-    print_horizontal_line(TMB::Top, &column_widths, linenum_width);
+    print_horizontal_line(frame::CROSSING_TOP, &column_widths, linenum_width);
     if opt.header {
         for (li, line) in lines.iter().enumerate() {
             let line = if line.is_empty() { " " } else { line };
             let cells = split_to_cells(li, line)?;
             print_line(li, &cells, &column_widths, linenum_width);
             if li == 0 {
-                print_horizontal_line(TMB::Middle, &column_widths, linenum_width);
+                print_horizontal_line(frame::CROSSING_MIDDLE, &column_widths, linenum_width);
             }
         }
     } else {
@@ -131,7 +135,7 @@ fn main() -> anyhow::Result<()> {
             print_line(li + 1, &cells, &column_widths, linenum_width);
         }
     }
-    print_horizontal_line(TMB::Bottom, &column_widths, linenum_width);
+    print_horizontal_line(frame::CROSSING_BOTTOM, &column_widths, linenum_width);
 
     Ok(())
 }

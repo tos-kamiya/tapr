@@ -1,8 +1,10 @@
+use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use super::constants::*;
+use super::utils::*;
 
 fn all_digits(subcells: &[&str]) -> bool {
     for item in subcells {
@@ -90,9 +92,7 @@ pub fn print_line<S: AsRef<str>>(
 
     // split each cells into unicode chars
     let mut subcells = to_subcells(cells);
-    while subcells.len() < column_count {
-        subcells.push(vec![]);
-    }
+    subcells.resize(column_count, vec![]);
     let subcell_right_aligns: Vec<bool> = subcells.iter().map(|ss| all_digits(ss)).collect();
 
     // print cells
@@ -101,11 +101,7 @@ pub fn print_line<S: AsRef<str>>(
     while (0..column_count).any(|ci| dones[ci] < subcells[ci].len()) {
         // print line number
         if linenum_width > 0 {
-            let c = ANSI_ESCAPE_TEXT_COLORS[if line_number == 0 {
-                0
-            } else {
-                1 + line_number % 2
-            }];
+            let c = ANSI_ESCAPE_TEXT_COLORS[(line_number == 0).q(0, 1 + line_number % 2)];
             print!("{}", c);
             if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
@@ -191,7 +187,7 @@ pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec<MinMedMa
     }
 
     let column_count: usize = column_width_lists.len();
-    let median_index = (line_count + 1) / 2;
+    let median_index = (line_count == 1).q(0, (line_count + 1) / 2);
 
     let mut column_widths: Vec<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
     for ci in 0..column_count {
@@ -202,15 +198,21 @@ pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec<MinMedMa
     column_widths
 }
 
+#[derive(Error, Debug)]
+pub enum DetColumnWidthError {
+    #[error("too many columns: {}", .columns)]
+    TooManyColumns { columns: usize },
+}
+
 pub fn det_print_column_widths(
     column_width_minmedmaxs: &[MinMedMax],
     terminal_width: usize,
-) -> Option<Vec<usize>> {
+) -> Result<Vec<usize>, DetColumnWidthError> {
     let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
 
     let column_count: usize = column_width_minmedmaxs.len();
     if column_count == 0 {
-        return Some(vec![]);
+        return Ok(vec![]);
     }
 
     // check if each column need to more than min width (MAX_UNFOLDED_COLUMN_WIDTH)
@@ -232,7 +234,7 @@ pub fn det_print_column_widths(
         - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *FRAME_CHAR_WIDTH)
             as isize;
     if allocable < 0 {
-        return None;
+        return Err(DetColumnWidthError::TooManyColumns { columns: column_count });
     }
 
     // allocate widths to each column
@@ -250,5 +252,5 @@ pub fn det_print_column_widths(
         }
     }
 
-    Some(column_allocations)
+    Ok(column_allocations)
 }

@@ -5,3 +5,4 @@ pub mod constants;
 pub mod formatter;
 pub mod safe_terminal_size;
 pub mod table_reader;
+pub mod utils;

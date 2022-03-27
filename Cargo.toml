@@ -1,7 +1,7 @@
 [package]
 name = "tapr"
 description = "tapr is a table pretty-printer. Outputs a CSV or TSV file as nicely as possible by adjusting column widths."
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 authors = ["Toshihiro Kamiya <kamiya@mbj.nifty.com>"]
 license = "MIT/Apache-2.0"
@@ -20,6 +20,8 @@ terminal_size = "0.1"
 structopt = "0.3"
 lazy_static = "1.4"
 csv = "1.1"
+thiserror = "1.0"
+anyhow = "1.0"
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2"

@@ -1,21 +1,31 @@
 use csv::ReaderBuilder;
+use thiserror::Error;
 
-pub fn split_csv_line(li: usize, line: &str) -> Vec<String> {
+#[derive(Error, Debug)]
+pub enum SplitLineError {
+    #[error("line: {}, invalid text: {}", .linenum, .text)]
+    InvalidText { linenum: usize, text: String },
+}
+
+pub fn split_csv_line(li: usize, line: &str) -> Result<Vec<String>, SplitLineError> {
     let mut rdr = ReaderBuilder::new()
         .delimiter(b',')
         .has_headers(false)
         .from_reader(line.as_bytes());
     if let Some(result) = rdr.records().next() {
-        let record = result.unwrap_or_else(|_e| {
-            eprintln!("Error: line {}: invalid text: {}", li + 1, line);
-            std::process::exit(1);
-        });
-        record.iter().map(|item| item.to_string()).collect()
+        match result {
+            Ok(record) => {
+                Ok(record.iter().map(|item| item.to_string()).collect())
+            }
+            Err(_) => {
+                Err(SplitLineError::InvalidText { linenum: li + 1, text: line.to_string() })
+            }
+        }
     } else {
-        vec![]
+        Ok(vec![])
     }
 }
 
-pub fn split_tsv_line(_li: usize, line: &str) -> Vec<String> {
-    line.split('\t').map(|item| item.to_string()).collect()
+pub fn split_tsv_line(_li: usize, line: &str) -> Result<Vec<String>, SplitLineError> {
+    Ok(line.split('\t').map(|item| item.to_string()).collect())
 }

@@ -59,9 +59,12 @@ struct Opt {
 }
 
 #[derive(Error, Debug)]
-pub enum CommandLineParseError {
+pub enum TaprError {
     #[error("options --csv and --tsv are mutually exclusive")]
     OptionsCSVAndTSVAreMutuallyExclusive,
+
+    #[error("line {}: decode error", .linenum)]
+    DecodeError { linenum: usize },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -70,7 +73,7 @@ fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
     if opt.csv && opt.tsv {
-        return Err(CommandLineParseError::OptionsCSVAndTSVAreMutuallyExclusive.into());
+        return Err(TaprError::OptionsCSVAndTSVAreMutuallyExclusive.into());
     }
     let line_sampling = (opt.line_sampling == 0).q(1, opt.line_sampling);
 
@@ -81,16 +84,20 @@ fn main() -> anyhow::Result<()> {
 
     // read input lines
     let input_file = opt.input.clone().into_os_string().into_string().unwrap();
-    let lines: Vec<String> = if input_file == "-" {
+    let mut lines: Vec<String> = vec![];
+    if input_file == "-" {
         let stdin = io::stdin();
-        stdin.lock().lines().map(|line| line.unwrap()).collect()
+        for (li, line) in stdin.lock().lines().enumerate() {
+            let line = line.context(TaprError::DecodeError { linenum: li + 1 })?;
+            lines.push(line);
+        }
     } else {
         let fp =
             File::open(opt.input).with_context(|| format!("fail to open file: {}", input_file))?;
-        io::BufReader::new(fp)
-            .lines()
-            .map(|line| line.unwrap())
-            .collect()
+        for (li, line) in io::BufReader::new(fp).lines().enumerate() {
+            let line = line.context(TaprError::DecodeError { linenum: li + 1 })?;
+            lines.push(line);
+        }
     };
 
     // if input is empty, then exits without printing something

@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SplitLineError {
-    #[error("line: {}, invalid text: {}", .linenum, .text)]
+    #[error("line {}: invalid text: {}", .linenum, .text)]
     InvalidText { linenum: usize, text: String },
 }
 

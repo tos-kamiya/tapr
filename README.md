@@ -26,7 +26,8 @@ FLAGS:
     -V, --version        Prints version information
 
 OPTIONS:
-        --line-sampling <line-sampling>    Sampling size of lines to determine width of each column [default: 100]
+    -s, --line-sampling <num>    Sampling size of lines to determine width of each column. Specify `0` for +inf
+                                 [default: 100]
 
 ARGS:
     <input>    Input file. Specify `-` to read from the standard input

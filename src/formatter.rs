@@ -176,6 +176,14 @@ pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec<MinMedMa
     column_widths
 }
 
+fn mid_max(mmm: &MinMedMax, p: f32) -> isize {
+    if p == 1.0 {
+        mmm.2 as isize
+    } else {
+        (mmm.1 as f32 * (1.0 - p) + mmm.2 as f32 * p) as isize
+    }
+} 
+
 #[derive(Error, Debug)]
 pub enum DetColumnWidthError {
     #[error("too many columns: {}", .columns)]
@@ -186,46 +194,57 @@ pub fn det_print_column_widths(
     column_width_minmedmaxs: &[MinMedMax],
     terminal_width: usize,
 ) -> Result<Vec<usize>, DetColumnWidthError> {
-    let mid_max = |mmm: &MinMedMax| (mmm.1 + mmm.2) / 2;
 
     let column_count: usize = column_width_minmedmaxs.len();
     if column_count == 0 {
         return Ok(vec![]);
     }
 
-    // check if each column need to more than min width (MAX_UNFOLDED_COLUMN_WIDTH)
-    let mut need_to_alloc: usize = 0;
-    let mut extra_allocable: usize = 0;
-    for mmm in column_width_minmedmaxs {
-        if mid_max(mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
-            need_to_alloc += mid_max(mmm) - MAX_UNFOLDED_COLUMN_WIDTH;
-        } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
-            extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
+    // determine width of each column
+    let mut v = None;
+    for p in (50..=105).rev().step_by(5) {
+        let weight_of_max: f32 = p as f32 / 100.0;
+        let mut need_to_alloc: usize = 0;
+        let mut extra_allocable: usize = 0;
+
+        // determine width requested by each column
+        for mmm in column_width_minmedmaxs {
+            let t = mid_max(mmm, weight_of_max) as usize;
+            if t > MAX_UNFOLDED_COLUMN_WIDTH {
+                need_to_alloc += t - MAX_UNFOLDED_COLUMN_WIDTH;
+            } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
+                extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
+            }
+        }
+        if need_to_alloc == 0 {
+            need_to_alloc = 1;
+        }
+
+        // check terminal has enough width to the requests
+        let allocable: isize = (terminal_width + extra_allocable) as isize
+            - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *frame::CHAR_WIDTH)
+                as isize;
+        if allocable >= 0 {
+            v = Some((weight_of_max, need_to_alloc, allocable as usize));
+            break;  // for p
         }
     }
-    if need_to_alloc == 0 {
-        need_to_alloc = 1;
-    }
-
-    // calculate how many chars are allocable to columns need more width
-    let allocable: isize = (terminal_width + extra_allocable) as isize
-        - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *frame::CHAR_WIDTH)
-            as isize;
-    if allocable < 0 {
+    if v == None {
         return Err(DetColumnWidthError::TooManyColumns {
             columns: column_count,
         });
     }
 
     // allocate widths to each column
-    let allocable = allocable as usize;
+    let (weight_of_max, need_to_alloc, allocable) = v.unwrap();
     let mut column_allocations: Vec<usize> = vec![MAX_UNFOLDED_COLUMN_WIDTH; column_count];
     for ci in 0..column_count {
         let mmm = column_width_minmedmaxs[ci];
-        if mid_max(&mmm) > MAX_UNFOLDED_COLUMN_WIDTH {
+        let t = mid_max(&mmm, weight_of_max) as usize;
+        if t > MAX_UNFOLDED_COLUMN_WIDTH {
             column_allocations[ci] += std::cmp::min(
                 mmm.2 - MAX_UNFOLDED_COLUMN_WIDTH,
-                (mid_max(&mmm) - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc,
+                (t - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc,
             );
         } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
             column_allocations[ci] -= MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;

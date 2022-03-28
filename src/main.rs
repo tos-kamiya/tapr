@@ -29,9 +29,8 @@ fn determine_column_widths(
     }
 }
 
-/// Table Pretty-print. print TSV or CSV file.
 #[derive(StructOpt, Debug)]
-#[structopt(name = "tapr")]
+#[structopt(name = "tapr", about = "Table Pretty-print. print TSV or CSV file.")]
 struct Opt {
     /// Force treats input file as CSV
     #[structopt(short = "c", long)]
@@ -49,8 +48,8 @@ struct Opt {
     #[structopt(short = "H", long)]
     header: bool,
 
-    /// Sampling size of lines to determine width of each column
-    #[structopt(long = "line-sampling", default_value = "100")]
+    /// Sampling size of lines to determine width of each column. Specify `0` for +inf
+    #[structopt(short = "s", long = "line-sampling", name = "num", default_value = "100")]
     line_sampling: usize,
 
     /// Input file. Specify `-` to read from the standard input.
@@ -75,7 +74,6 @@ fn main() -> anyhow::Result<()> {
     if opt.csv && opt.tsv {
         return Err(TaprError::OptionsCSVAndTSVAreMutuallyExclusive.into());
     }
-    let line_sampling = (opt.line_sampling == 0).q(1, opt.line_sampling);
 
     // get terminal width
     let size = safe_terminal_size();
@@ -113,7 +111,11 @@ fn main() -> anyhow::Result<()> {
     let cell_separator = (opt.csv || !opt.tsv && !includes_tab).q(',', '\t');
     let split_to_cells: fn(usize, &str) -> Result<Vec<String>, _> =
         (cell_separator == ',').q(split_csv_line, split_tsv_line);
-    let lines_sampled = &lines[..cmp::min(lines.len(), line_sampling)];
+    let lines_sampled = if opt.line_sampling == 0 { 
+        &lines[..] 
+    } else {
+        &lines[..cmp::min(lines.len(), opt.line_sampling)]
+    };
     let mut line_cells_sampled: Vec<Vec<String>> = vec![];
     for (li, line) in lines_sampled.iter().enumerate() {
         let cells = split_to_cells(li, line)?;

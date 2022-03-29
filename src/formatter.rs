@@ -1,4 +1,6 @@
-use thiserror::Error;
+use std::io;
+
+use anyhow;
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -7,76 +9,71 @@ use super::constants::*;
 use super::utils::*;
 
 fn all_digits<S: AsRef<str>>(text: S) -> bool {
-    text.as_ref().chars().find(|c| !('0'..='9').contains(&c)) == None
+    text.as_ref().chars().find(|c| !('0'..='9').contains(c)) == None
 }
 
-fn print_str_bar<S: AsRef<str>>(s: S, count: usize) {
+fn format_str_bar<S: AsRef<str>>(s: S, count: usize) -> String {
     if count > 0 {
-        let s = s.as_ref();
-        print!("{}", (0..count).map(|_| s).collect::<String>());
+        (0..count).map(|_| s.as_ref()).collect()
+    } else {
+        "".to_string()
     }
 }
 
-pub fn print_horizontal_line(crossing: &str, column_widths: &[usize], linenum_width: usize) {
+pub fn print_horizontal_line(out: &mut dyn io::Write, crossing: &str, column_widths: &[usize], linenum_width: usize) -> anyhow::Result<()> {
     use super::constants::ansi_escape::*;
 
     assert!(*frame::CHAR_WIDTH == 1);
 
     let column_count = column_widths.len();
 
-    print!("{}", FRAME_COLOR);
-
+    write!(out, "{}", FRAME_COLOR)?;
     if linenum_width > 0 {
-        print_str_bar(frame::HORIZONTAL, linenum_width);
-        print!("{}", crossing);
+        write!(out, "{}{}", format_str_bar(frame::HORIZONTAL, linenum_width), crossing)?;
     }
-
     for (ci, cwc) in column_widths.iter().enumerate() {
-        print_str_bar(frame::HORIZONTAL, *cwc);
+        write!(out, "{}", format_str_bar(frame::HORIZONTAL, *cwc))?;
         if ci != column_count - 1 {
-            print!("{}", crossing);
+            write!(out, "{}", crossing)?;
         }
     }
-    println!("{}", RESET_COLOR);
+    writeln!(out, "{}", RESET_COLOR)?;
+
+    Ok(())
 }
 
-fn print_cell<S: AsRef<str>>(subcells: &[S], column_width: usize, right_align: bool) {
+fn print_cell<S: AsRef<str>>(out: &mut dyn io::Write, subcells: &[S], column_width: usize, right_align: bool) -> anyhow::Result<()> {
     let w: usize = subcells
         .iter()
         .map(|s| UnicodeWidthStr::width(s.as_ref()))
         .sum();
     let s: String = subcells.iter().map(|s| s.as_ref()).collect();
+    let padding = format_str_bar(" ", column_width - w);
     if right_align {
-        print_str_bar(" ", column_width - w);
-        print!("{}", s.nfc());
+        write!(out, "{}{}", padding, s.nfc())?;
     } else {
-        print!("{}", s.nfc());
-        print_str_bar(" ", column_width - w);
+        write!(out, "{}{}", s.nfc(), padding)?;
     }
-}
 
-fn to_subcells<S: AsRef<str>>(cells: &[S]) -> Vec<Vec<&str>> {
-    let mut subcells: Vec<Vec<&str>> = vec![]; // split each cell into substrings
-    for cell in cells {
-        let v: Vec<&str> = UnicodeSegmentation::graphemes(cell.as_ref(), true).collect();
-        subcells.push(v);
-    }
-    subcells
+    Ok(())
 }
 
 pub fn print_line<S: AsRef<str>>(
+    out: &mut dyn io::Write, 
     line_number: usize,
     cells: &[S],
     column_widths: &[usize],
     linenum_width: usize,
-) {
+) -> anyhow::Result<()> {
     use super::constants::ansi_escape::*;
 
-    assert!(!cells.is_empty());
     let column_count = column_widths.len();
 
     // split each cells into unicode chars
-    let mut subcells = to_subcells(cells);
+    let mut subcells: Vec<Vec<&str>> = cells.iter().map(|cell| UnicodeSegmentation::graphemes(cell.as_ref(), true).collect()).collect();
+    if subcells.is_empty() {
+        subcells.push(vec![" "]);
+    }
     subcells.resize(column_count, vec![]);
 
     let cell_right_aligns: Vec<bool> = cells.iter().map(|s| all_digits(s.as_ref())).collect();
@@ -88,15 +85,14 @@ pub fn print_line<S: AsRef<str>>(
         // print line number
         if linenum_width > 0 {
             let c = TEXT_COLORS[(line_number == 0).q(0, 1 + line_number % 2)];
-            print!("{}", c);
+            write!(out, "{}", c)?;
             if line_number != 0 && first_physical_line {
                 let linenum_str = line_number.to_string();
-                print_str_bar(" ", linenum_width - linenum_str.len());
-                print!("{}", linenum_str);
+                write!(out, "{}{}", format_str_bar(" ", linenum_width - linenum_str.len()), linenum_str)?;
             } else {
-                print_str_bar(" ", linenum_width);
+                write!(out, "{}", format_str_bar(" ", linenum_width))?;
             }
-            print!("{}{}", FRAME_COLOR, frame::VERTICAL);
+            write!(out, "{}{}", FRAME_COLOR, frame::VERTICAL)?;
         }
 
         // determine the subcells to be printed for each cell in the current line
@@ -123,133 +119,66 @@ pub fn print_line<S: AsRef<str>>(
             let cwc = column_widths[ci];
             let crac = ci < cell_right_aligns.len() && cell_right_aligns[ci];
             let c = TEXT_COLORS[(line_number == 0).q(0, 1 + line_number % 2)];
-            print!("{}", c);
-            print_cell(&csc[dones[ci]..todos[ci]], cwc, crac);
+            write!(out, "{}", c)?;
+            print_cell(out, &csc[dones[ci]..todos[ci]], cwc, crac)?;
             if ci == column_count - 1 {
                 break; // for ci
             }
-            print!("{}{}{}", RESET_COLOR, FRAME_COLOR, frame::VERTICAL);
+            write!(out, "{}{}", FRAME_COLOR, frame::VERTICAL)?;
         }
-        println!("{}", RESET_COLOR);
+        writeln!(out, "{}", RESET_COLOR)?;
 
         // update indices to mark the subcells "printed"
         dones = todos;
 
         first_physical_line = false;
     }
+
+    Ok(())
 }
 
-fn str_width(s: &str) -> usize {
-    UnicodeSegmentation::graphemes(s, true)
-        .map(UnicodeWidthStr::width)
-        .sum()
-}
+#[cfg(test)]
+mod tests {
+    use super::super::constants::ansi_escape::*;
+    use super::super::constants::frame::*;
+    use super::*;
 
-#[derive(Copy, Clone, Debug)]
-pub struct MinMedMax(usize, usize, usize);
+    #[test]
+    fn test_print_line_for_empty() -> anyhow::Result<()> {
+        let mut out = io::Cursor::new(vec![]);
+        let cells: Vec<&str> = vec![];
+        print_line(&mut out, 0, &cells, &vec![], 0)?;
+        let value = String::from_utf8(out.into_inner()).unwrap();
+        assert!(value.is_empty());
 
-pub fn get_raw_column_widths<S: AsRef<str>>(line_cells: &[&[S]]) -> Vec<MinMedMax> {
-    let line_count = line_cells.len();
-
-    let mut column_width_lists: Vec<Vec<usize>> = vec![];
-    for (ri, cells) in line_cells.iter().enumerate() {
-        for (ci, cell) in cells.iter().enumerate() {
-            if ci >= column_width_lists.len() {
-                column_width_lists.push(vec![0; line_count]);
-            }
-            column_width_lists[ci][ri] = str_width(cell.as_ref());
-        }
-    }
-    for cwl in &mut column_width_lists {
-        cwl.sort_unstable();
+        Ok(())
     }
 
-    let column_count: usize = column_width_lists.len();
-    let median_index = (line_count == 1).q(0, (line_count + 1) / 2);
+    #[test]
+    fn test_print_line_for_empty_cell() -> anyhow::Result<()> {
+        let mut out = io::Cursor::new(vec![]);
+        let cells: Vec<&str> = vec![];
+        print_line(&mut out, 0, &cells, &vec![1], 0)?;
+        let value = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(value, format!("{} {}\n", TEXT_COLORS[0], RESET_COLOR));
 
-    let mut column_widths: Vec<MinMedMax> = vec![MinMedMax(0, 0, 0); column_count];
-    for ci in 0..column_count {
-        let cwlc: &[usize] = &column_width_lists[ci];
-        column_widths[ci] = MinMedMax(cwlc[0], cwlc[median_index], cwlc[cwlc.len() - 1]);
+        Ok(())
     }
 
-    column_widths
-}
+    #[test]
+    fn test_print_line_for_missing_columns() -> anyhow::Result<()> {
+        let mut out = io::Cursor::new(vec![]);
+        let cells: Vec<&str> = vec!["1"];
+        print_line(&mut out, 0, &cells, &vec![1, 2, 3], 0)?;
+        let value = String::from_utf8(out.into_inner()).unwrap();
+        assert_eq!(value, format!("{}1{}{}{}  {}{}{}   {}\n", 
+            TEXT_COLORS[0], 
+            FRAME_COLOR, VERTICAL, 
+            TEXT_COLORS[0], 
+            FRAME_COLOR, VERTICAL, 
+            TEXT_COLORS[0], 
+            RESET_COLOR));
 
-fn mid_max(mmm: &MinMedMax, p: f32) -> isize {
-    if p == 1.0 {
-        mmm.2 as isize
-    } else {
-        (mmm.1 as f32 * (1.0 - p) + mmm.2 as f32 * p) as isize
+        Ok(())
     }
-} 
-
-#[derive(Error, Debug)]
-pub enum DetColumnWidthError {
-    #[error("too many columns: {}", .columns)]
-    TooManyColumns { columns: usize },
-}
-
-pub fn det_print_column_widths(
-    column_width_minmedmaxs: &[MinMedMax],
-    terminal_width: usize,
-) -> Result<Vec<usize>, DetColumnWidthError> {
-
-    let column_count: usize = column_width_minmedmaxs.len();
-    if column_count == 0 {
-        return Ok(vec![]);
-    }
-
-    // determine width of each column
-    let mut v = None;
-    for p in (50..=105).rev().step_by(5) {
-        let weight_of_max: f32 = p as f32 / 100.0;
-        let mut need_to_alloc: usize = 0;
-        let mut extra_allocable: usize = 0;
-
-        // determine width requested by each column
-        for mmm in column_width_minmedmaxs {
-            let t = mid_max(mmm, weight_of_max) as usize;
-            if t > MAX_UNFOLDED_COLUMN_WIDTH {
-                need_to_alloc += t - MAX_UNFOLDED_COLUMN_WIDTH;
-            } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
-                extra_allocable += MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
-            }
-        }
-        if need_to_alloc == 0 {
-            need_to_alloc = 1;
-        }
-
-        // check terminal has enough width to the requests
-        let allocable: isize = (terminal_width + extra_allocable) as isize
-            - (column_count * MAX_UNFOLDED_COLUMN_WIDTH + (column_count - 1) * *frame::CHAR_WIDTH)
-                as isize;
-        if allocable >= 0 {
-            v = Some((weight_of_max, need_to_alloc, allocable as usize));
-            break;  // for p
-        }
-    }
-    if v == None {
-        return Err(DetColumnWidthError::TooManyColumns {
-            columns: column_count,
-        });
-    }
-
-    // allocate widths to each column
-    let (weight_of_max, need_to_alloc, allocable) = v.unwrap();
-    let mut column_allocations: Vec<usize> = vec![MAX_UNFOLDED_COLUMN_WIDTH; column_count];
-    for ci in 0..column_count {
-        let mmm = column_width_minmedmaxs[ci];
-        let t = mid_max(&mmm, weight_of_max) as usize;
-        if t > MAX_UNFOLDED_COLUMN_WIDTH {
-            column_allocations[ci] += std::cmp::min(
-                mmm.2 - MAX_UNFOLDED_COLUMN_WIDTH,
-                (t - MAX_UNFOLDED_COLUMN_WIDTH) * allocable / need_to_alloc,
-            );
-        } else if mmm.2 < MAX_UNFOLDED_COLUMN_WIDTH {
-            column_allocations[ci] -= MAX_UNFOLDED_COLUMN_WIDTH - mmm.2;
-        }
-    }
-
-    Ok(column_allocations)
 }

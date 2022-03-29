@@ -7,6 +7,7 @@ use anyhow::{self, Context};
 use structopt::StructOpt;
 use thiserror::Error;
 
+use tapr::column_width_allocator::*;
 use tapr::constants::*;
 use tapr::formatter::*;
 use tapr::safe_terminal_size::*;
@@ -14,11 +15,11 @@ use tapr::table_reader::*;
 use tapr::utils::*;
 
 fn determine_column_widths(
-    line_cells: Vec<&[String]>,
+    line_cells: &[&[String]],
     linenum_width: usize,
     terminal_width: usize,
 ) -> Result<Vec<usize>, DetColumnWidthError> {
-    let column_width_minmedmaxs = get_raw_column_widths(&line_cells);
+    let column_width_minmedmaxs = get_raw_column_widths(line_cells);
     if linenum_width > 0 {
         det_print_column_widths(
             &column_width_minmedmaxs,
@@ -124,27 +125,26 @@ fn main() -> anyhow::Result<()> {
     let line_cells_sampled: Vec<&[String]> =
         line_cells_sampled.iter().map(|lc| lc.as_ref()).collect();
     let column_widths: Vec<usize> =
-        determine_column_widths(line_cells_sampled, linenum_width, terminal_width)?;
+        determine_column_widths(&line_cells_sampled, linenum_width, terminal_width)?;
 
     // print lines as a table
-    print_horizontal_line(frame::CROSSING_TOP, &column_widths, linenum_width);
+    let mut out = io::stdout();
+    print_horizontal_line(&mut out, frame::CROSSING_TOP, &column_widths, linenum_width)?;
     if opt.header {
         for (li, line) in lines.iter().enumerate() {
-            let line = if line.is_empty() { " " } else { line };
             let cells = split_to_cells(li, line)?;
-            print_line(li, &cells, &column_widths, linenum_width);
+            print_line(&mut out, li, &cells, &column_widths, linenum_width)?;
             if li == 0 {
-                print_horizontal_line(frame::CROSSING_MIDDLE, &column_widths, linenum_width);
+                print_horizontal_line(&mut out, frame::CROSSING_MIDDLE, &column_widths, linenum_width)?;
             }
         }
     } else {
         for (li, line) in lines.iter().enumerate() {
-            let line = if line.is_empty() { " " } else { line };
             let cells = split_to_cells(li, line)?;
-            print_line(li + 1, &cells, &column_widths, linenum_width);
+            print_line(&mut out, li + 1, &cells, &column_widths, linenum_width)?;
         }
     }
-    print_horizontal_line(frame::CROSSING_BOTTOM, &column_widths, linenum_width);
+    print_horizontal_line(&mut out, frame::CROSSING_BOTTOM, &column_widths, linenum_width)?;
 
     Ok(())
 }

@@ -1,9 +1,12 @@
+#[macro_use]
+extern crate anyhow;
+
 use std::cmp;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use anyhow::{self, Context};
+use anyhow::Context;
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -60,9 +63,6 @@ struct Opt {
 
 #[derive(Error, Debug)]
 pub enum TaprError {
-    #[error("options --csv and --tsv are mutually exclusive")]
-    OptionsCSVAndTSVAreMutuallyExclusive,
-
     #[error("line {}: decode error", .linenum)]
     DecodeError { linenum: usize },
 }
@@ -73,7 +73,7 @@ fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
     // println!("{:#?}", opt);
     if opt.csv && opt.tsv {
-        return Err(TaprError::OptionsCSVAndTSVAreMutuallyExclusive.into());
+        return Err(anyhow!("options --csv and --tsv are mutually exclusive"));
     }
 
     // get terminal width
